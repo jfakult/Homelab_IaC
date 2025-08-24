@@ -1,0 +1,7 @@
+---
+- name: apply keyboard
+  become: true
+  block:
+    - name: Apply keyboard without reboot (Debian/Ubuntu)
+      command: setupcon
+      when: ansible_facts.os_family == 'Debian'

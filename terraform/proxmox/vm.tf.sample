@@ -1,0 +1,49 @@
+resource "proxmox_vm_qemu" "butlah" {
+  node_name = "pve"
+  name      = "ButlahOld"
+  desc      = "Imported config from qm config 100"
+
+  cpu {
+    type   = "host"
+    cores  = 40
+    sockets = 1
+    flags  = ["+pdpe1gb", "+aes"]
+    numa   = true
+  }
+
+  memory {
+    dedicated = 57344   # MB
+    balloon   = 32768   # MB
+  }
+
+  disk {
+    datastore_id = "local-lvm"
+    interface    = "scsi0"
+    size         = 640 * 1024  # MB
+    discard      = "on"
+    iothread     = true
+  }
+
+  scsi_hardware = "virtio-scsi-single"
+
+  network_device {
+    bridge   = "vmbr0"
+    model    = "virtio"
+    firewall = true
+    mac_address = "BC:24:11:64:0D:F6"
+  }
+
+  boot_order = ["scsi0", "ide2", "net0"]
+
+  cdrom {
+    datastore_id = "local"
+    file_id      = "iso/ubuntu-24.04.3-live-server-amd64.iso"
+  }
+
+  # Optional metadata
+  smbios {
+    uuid = "0f86a06e-63c1-4b1d-8630-3daad2106c3a"
+  }
+
+  vmgenid = "47f38158-0f2a-467f-be99-7ef75cb7ed06"
+}

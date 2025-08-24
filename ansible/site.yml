@@ -1,0 +1,6 @@
+---
+- name: Configure base settings
+  hosts: all
+  become: true
+  roles:
+    - base

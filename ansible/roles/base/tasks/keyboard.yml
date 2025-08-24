@@ -1,0 +1,9 @@
+- name: Configure keyboard (Debian/Ubuntu)
+  template:
+    src: keyboard.j2
+    dest: /etc/default/keyboard
+    owner: root
+    group: root
+    mode: '0644'
+  when: ansible_facts.os_family == 'Debian'
+  notify: apply keyboard
