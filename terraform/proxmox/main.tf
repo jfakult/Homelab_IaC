@@ -59,7 +59,7 @@ resource "proxmox_virtual_environment_vm" "vm" {
   disk {
     datastore_id = local.storage_pool
     interface    = "scsi0"
-    size         = each.value.disk * 1024   # MB
+    size         = each.value.disk   # MB
   }
 
   network_device {

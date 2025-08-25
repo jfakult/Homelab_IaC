@@ -21,8 +21,8 @@ variable "vms" {
     ip      = string
     purpose = string
     cores   = optional(number, 2)     # template default = 2
-    memory  = optional(number, 4096)  # template default = 4 GB
-    balloon = optional(number, 2048)  # template default = 2 GB
+    memory  = optional(number, 2048)  # template default = 2 GB
+    balloon = optional(number, 768)  # template default = 768 MB
     disk    = optional(number, 10)    # template default = 10 GB
   }))
 }
