@@ -1,0 +1,3 @@
+# roles/bastion/handlers/main.yml
+- name: Reload nginx
+  shell: docker exec rp-nginx nginx -s reload

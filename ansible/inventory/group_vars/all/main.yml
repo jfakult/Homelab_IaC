@@ -1,3 +1,5 @@
+gateway_domain_root: "fakult.net"
+
 ansible_user: ubuntu
 ansible_become: true
 ansible_become_method: sudo

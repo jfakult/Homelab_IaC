@@ -1,0 +1,24 @@
+pg_version: "16"
+pg_db_dir: "/opt/postgres/data"
+pg_backups_dir: "/opt/postgres/backups"
+pg_listen_addr: "0.0.0.0"
+pg_db_authentik: "authentik"
+pg_user_authentik: "authentik"
+pg_password_authentik: "{{ vault_pg_password_authentik }}"
+pg_allowed_cidrs:
+  - "192.168.1.204/32"   # SSO
+  - "192.168.1.205/32"   # Webapps
+
+
+# sso:
+authentik_domain: "sso.fakult.net"
+authentik_secret_key: "{{ vault_authentik_secret_key }}"
+authentik_bootstrap_email: "admin@example.com"
+authentik_bootstrap_password: "{{ vault_authentik_bootstrap_pw }}"
+
+# external DB (on 203)
+pg_host: "192.168.1.203"
+pg_port: "5432"
+pg_db: "authentik"
+pg_user: "authentik"
+pg_password: "{{ vault_pg_password_authentik }}"

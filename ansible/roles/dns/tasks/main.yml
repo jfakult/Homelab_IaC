@@ -1,0 +1,9 @@
+pre_tasks:
+  import_tasks: misc/tasks/install_docker_and_compose.yml
+
+tasks:
+  - name: Drop vhosts
+    template:
+      src: server_whoami.conf.j2
+      dest: /etc/nginx/conf.d/whoami.conf
+    #notify: Reload nginx

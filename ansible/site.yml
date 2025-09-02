@@ -2,5 +2,33 @@
 - name: Configure base settings
   hosts: all
   become: true
+  become_method: sudo
   roles:
     - base
+
+- name: Configure DB
+  hosts: db
+  become: true
+  become_method: sudo
+  pre_tasks:
+    - import_tasks: roles/misc/tasks/install_docker_and_compose.yml
+  roles:
+    - db
+
+- name: Configure SSO
+  hosts: sso
+  become: true
+  become_method: sudo
+  pre_tasks:
+    - import_tasks: roles/misc/tasks/install_docker_and_compose.yml
+  roles:
+    - sso
+
+- name: Configure Bastion
+  hosts: bastion
+  become: true
+  become_method: sudo
+  pre_tasks:
+    - import_tasks: roles/misc/tasks/install_docker_and_compose.yml
+  roles:
+    - bastion

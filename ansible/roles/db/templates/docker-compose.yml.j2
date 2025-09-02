@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: docker.io/library/postgres:{{ pg_version }}
+    container_name: pg-main
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "{{ pg_user_authentik }}"
+      POSTGRES_PASSWORD: "{{ pg_password_authentik }}"
+      POSTGRES_DB: "{{ pg_db_authentik }}"
+    volumes:
+      - {{ pg_db_dir }}:/var/lib/postgresql/data
+      - {{ pg_backups_dir }}:/backups
+      - /opt/postgres/conf:/etc/postgresql/conf
+    command: >
+      -c config_file=/etc/postgresql/conf/postgresql.conf
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U {{ pg_user_authentik }} -d {{ pg_db_authentik }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 6

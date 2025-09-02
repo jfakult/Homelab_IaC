@@ -1,0 +1,8 @@
+listen_addresses = '{{ pg_listen_addr }}'
+max_connections = 200
+shared_buffers = 256MB
+wal_level = replica
+synchronous_commit = off
+checkpoint_timeout = 15min
+jit = off
+hba_file = '/etc/postgresql/conf/pg_hba.conf'

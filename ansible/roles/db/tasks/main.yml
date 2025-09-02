@@ -1,0 +1,67 @@
+- name: Create dirs
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: 999
+    group: 999
+    mode: "0750"
+  loop:
+    - "{{ pg_db_dir }}"
+    - "{{ pg_backups_dir }}"
+    - "/opt/postgres/conf"
+    - "/opt/postgres"
+
+- name: Drop configs
+  template:
+    src: postgresql.conf.j2
+    dest: /opt/postgres/conf/postgresql.conf
+    mode: "0644"
+
+- name: Drop pg_hba.conf
+  template:
+    src: pg_hba.conf.j2
+    dest: /opt/postgres/conf/pg_hba.conf
+    mode: "0644"
+
+- name: Drop compose
+  template:
+    src: docker-compose.yml.j2
+    dest: /opt/postgres/docker-compose.yml
+    mode: "0644"
+
+- name: Up Postgres
+  shell: docker compose up -d
+  args: { chdir: /opt/postgres }
+
+- name: Ensure authentik database exists
+  community.postgresql.postgresql_db:
+    name: "{{ pg_db_authentik }}"
+    state: present
+    login_user: "{{ pg_user_authentik }}"
+    login_password: "{{ pg_password_authentik }}"
+    login_host: "127.0.0.1"
+
+# Optional: UFW firewall
+- name: Ensure ufw is present
+  package: { name: ufw, state: present }
+
+- name: Enable UFW, deny by default
+  ufw: { state: enabled, policy: deny }
+
+- name: Allow SSH
+  ufw: { rule: allow, port: "22", proto: tcp }
+
+- name: Allow Postgres only from SSO
+  ufw:
+    rule: allow
+    port: "5432"
+    proto: tcp
+    src: "192.168.1.204"
+
+# Simple nightly dump
+#- name: Cron pg_dump
+#  copy:
+#    dest: /etc/cron.d/pg_dumps
+#    mode: "0644"
+#    content: |
+#      15 2 * * * root docker exec pg-main pg_dump -U {{ pg_user_authentik }} {{ pg_db_authentik }} > {{ pg_backups_dir }}/authentik-$(date +\%F).sql 2>>/var/log/pg_dump.err

@@ -4,7 +4,7 @@
 
 INVENTORY="$IAC/ansible/inventory/hosts.ini"
 
-ansible-inventory -i "$INVENTORY" --list \
+ansible-inventory -J -i "$INVENTORY" --list \
   | jq -r '
       ._meta.hostvars
       | to_entries[]

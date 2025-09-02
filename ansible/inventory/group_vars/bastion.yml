@@ -1,0 +1,10 @@
+tls_mode: "mkcert"      # mkcert | letsencrypt
+tls_cert_path: "/etc/nginx/tls/{{ gateway_domain_root }}.crt"
+tls_key_path:  "/etc/nginx/tls/{{ gateway_domain_root }}.key"
+
+sso_base_url: "https://{{ authentik_domain }}"
+forward_auth_path: "/outpost.goauthentik.io/auth/nginx"
+
+# demo hostnames
+whoami_server_name: "whoami.{{ gateway_domain_root }}"
+files_server_name:  "files.{{ gateway_domain_root }}"
