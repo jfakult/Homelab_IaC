@@ -1,0 +1,23 @@
+
+authentik_base: "https://sso.fakult.net"
+
+jellyfin_compose_dir: "/opt/jellyfin"
+jellyfin_uid: "1000"
+jellyfin_gid: "1000"
+jellyfin_external_scheme: "https"
+jellyfin_external_host: "fakult.net"
+jellyfin_base_path: "/jellyfin"     # Jellyfin -> Dashboard -> Advanced -> Base URL
+jellyfin_oidc:
+  client_id: "to_fill_after_provider"
+  client_secret: "to_fill_after_provider"
+  scopes: "openid profile email groups"
+  discovery_url: "{{ authentik_base }}/application/o/jellyfin-oidc/.well-known/openid-configuration"
+media_paths:
+  movies: "/srv/media/Movies"
+  tv:     "/srv/media/TV"
+  config: "/srv/jellyfin/config"
+  cache:  "/srv/jellyfin/cache"
+## optional extras (omit if you don't want them)
+#jellyfin_fonts_dir: "/srv/fonts"
+#jellyfin_extra_hosts:
+#  - "host.docker.internal:host-gateway"

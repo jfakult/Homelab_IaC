@@ -5,9 +5,11 @@ services:
     restart: unless-stopped
     ports: [ "80:80", "443:443" ]
     volumes:
-      - /etc/nginx:/etc/nginx:ro
-      - /var/log/nginx:/var/log/nginx
+      - /etc/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/nginx/conf.d:/etc/nginx/conf.d:ro
+      - /etc/nginx/snippets:/etc/nginx/snippets:ro
       - /etc/nginx/tls:/etc/nginx/tls:ro
+      - {{ ssl_dir }}:{{ ssl_dir }}:ro
     healthcheck:
       test: ["CMD","nginx","-t"]
       interval: 30s

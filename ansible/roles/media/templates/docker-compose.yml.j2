@@ -1,0 +1,37 @@
+version: "3.9"
+services:
+  jellyfin:
+    image: jellyfin/jellyfin
+    container_name: jellyfin
+    user: "{{ jellyfin_uid }}:{{ jellyfin_gid }}"
+    network_mode: "host"
+    restart: "unless-stopped"
+    environment:
+      - JELLYFIN_PublishedServerUrl={{ jellyfin_external_scheme }}://{{ jellyfin_external_host }}{{ jellyfin_base_path }}
+    volumes:
+      - {{ media_paths.config }}:/config
+      - {{ media_paths.cache }}:/cache
+
+      # Media libraries (mount as subfolders under /media)
+      - type: bind
+        source: {{ media_paths.movies }}
+        target: /media/Movies
+      - type: bind
+        source: {{ media_paths.tv }}
+        target: /media/TV
+        read_only: true
+
+      {% if jellyfin_fonts_dir is defined and jellyfin_fonts_dir %}
+      # Optional fonts for subtitle burn-in
+      - type: bind
+        source: {{ jellyfin_fonts_dir }}
+        target: /usr/local/share/fonts/custom
+        read_only: true
+      {% endif %}
+
+    {% if jellyfin_extra_hosts is defined and jellyfin_extra_hosts %}
+    extra_hosts:
+    {% for h in jellyfin_extra_hosts %}
+      - "{{ h }}"
+    {% endfor %}
+    {% endif %}

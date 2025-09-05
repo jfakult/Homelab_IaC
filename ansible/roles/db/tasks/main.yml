@@ -33,6 +33,28 @@
   shell: docker compose up -d
   args: { chdir: /opt/postgres }
 
+- name: Wait for postgres TCP
+  wait_for:
+    port: 5432
+    delay: 0
+    timeout: 120
+
+- name: Wait for Postgres ready
+  shell: docker exec pg-main pg_isready -U {{ pg_user_authentik }}
+  register: pg
+  until: pg.rc == 0
+  retries: 30
+  delay: 2
+  changed_when: false
+
+- name: Install DB client + driver
+  apt:
+    name:
+      - postgresql-client
+      - python3-psycopg2
+    state: present
+    update_cache: yes
+
 - name: Ensure authentik database exists
   community.postgresql.postgresql_db:
     name: "{{ pg_db_authentik }}"
@@ -40,6 +62,8 @@
     login_user: "{{ pg_user_authentik }}"
     login_password: "{{ pg_password_authentik }}"
     login_host: "127.0.0.1"
+    port: 5432
+    ssl_mode: prefer
 
 # Optional: UFW firewall
 - name: Ensure ufw is present

@@ -1,0 +1,11 @@
+location = /jellyfin {
+  return 301 /jellyfin/;
+}
+
+location /jellyfin/ {
+  proxy_set_header X-Forwarded-Prefix /jellyfin;
+  proxy_pass {{ hostvars['media'].ansible_host }}/$request_uri;
+
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection $connection_upgrade;
+}

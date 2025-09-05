@@ -1,0 +1,41 @@
+- name: Ensure directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ jellyfin_uid }}"
+    group: "{{ jellyfin_gid }}"
+    mode: "0755"
+  loop:
+    - "{{ jellyfin_compose_dir }}"
+    - "{{ media_paths.config }}"
+    - "{{ media_paths.cache }}"
+    - "{{ media_paths.movies }}"
+    - "{{ media_paths.tv }}"
+    #- "{{ jellyfin_fonts_dir | default('', true) }}"
+
+- name: Drop docker-compose.yml
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ jellyfin_compose_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+    
+- name: Check if Jellyfin is already running
+  command: docker ps --filter "name=jellyfin$" --filter "status=running" --format "{{'{{.Names}}'}}"
+  register: jf_ps
+  changed_when: false
+  failed_when: false
+
+- name: Bring up Jellyfin stack (only if not running OR compose changed)
+  shell: docker compose up -d
+  args:
+    chdir: "{{ compose_dir }}"
+  when: jf_ps.stdout == "" or compose_file.changed
+
+- name: Validate Jellyfin is listening (host networking :8096)
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 8096
+    delay: 1
+    timeout: 60

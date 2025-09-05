@@ -3,6 +3,10 @@ services:
     image: ghcr.io/goauthentik/server:latest
     container_name: authentik
     restart: unless-stopped
+    command: server
+    depends_on:
+      redis:
+        condition: service_healthy
     environment:
       AUTHENTIK_SECRET_KEY: {{ authentik_secret_key }}
       AUTHENTIK_POSTGRESQL__HOST: {{ pg_host }}
@@ -12,16 +16,40 @@ services:
       AUTHENTIK_POSTGRESQL__PASSWORD: {{ pg_password }}
       AUTHENTIK_BOOTSTRAP_EMAIL: {{ authentik_bootstrap_email }}
       AUTHENTIK_BOOTSTRAP_PASSWORD: {{ authentik_bootstrap_password }}
-      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
-      AUTHENTIK_LOG_LEVEL: "info"
-      # You can add SMTP here later
-    volumes:
-      - /opt/authentik/app:/config
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_REDIS__PORT: "6379"
     ports:
-      - "0.0.0.0:80:9000"
-      - "0.0.0.0:443:9443"
+      - "80:9000"
+      - "443:9443"
+
+  worker:
+    image: ghcr.io/goauthentik/server:latest
+    container_name: authentik-worker
+    restart: unless-stopped
+    command: worker
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      AUTHENTIK_SECRET_KEY: {{ authentik_secret_key }}
+      AUTHENTIK_POSTGRESQL__HOST: {{ pg_host }}
+      AUTHENTIK_POSTGRESQL__PORT: "{{ pg_port }}"
+      AUTHENTIK_POSTGRESQL__NAME: {{ pg_db }}
+      AUTHENTIK_POSTGRESQL__USER: {{ pg_user }}
+      AUTHENTIK_POSTGRESQL__PASSWORD: {{ pg_password }}
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_REDIS__PORT: "6379"
+
+  redis:
+    image: redis:7-alpine
+    container_name: authentik-redis
+    restart: unless-stopped
+    command: ["redis-server","--save","\"\"","--appendonly","no"]
     healthcheck:
-      test: ["CMD","curl","-fsS","http://localhost:9000/"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
+      interval: 30s
+      retries: 5
+      start_period: 20s
+      test:
+      - CMD-SHELL
+      - redis-cli ping | grep PONG
+      timeout: 3s

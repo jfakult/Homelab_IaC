@@ -1,0 +1,71 @@
+worker_processes auto;
+pid /run/nginx.pid;
+
+events {
+  worker_connections 1024;
+}
+
+http {
+  #include       /etc/nginx/mime.types;
+  default_type  application/octet-stream;
+  sendfile on;
+  keepalive_timeout 65;
+
+  map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+
+  # Reusable proxy headers (so you don’t repeat in each block)
+  include /etc/nginx/conf.d/proxy_common.conf;
+
+  server {
+    listen 80;
+    listen [::]:80;
+    server_name {{ domain_name }};
+
+    # Special exceptions served in plaintext
+    location = /nossl {
+      default_type text/plain;
+      return 200 "This is plain HTTP!\n";
+    }
+    # Special exceptions served in plaintext
+    location = /neverssl {
+      default_type text/plain;
+      return 200 "This is plain HTTP!\n";
+    }
+    location = /http {
+      default_type text/plain;
+      return 200 "This is plain HTTP!\n";
+    }
+
+    # Everything else → HTTPS
+    location / {
+      return 301 https://$host$request_uri;
+    }
+  }
+
+  server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {{ domain_name }};
+
+    ssl_certificate     /etc/nginx/ssl/{{ domain_name }}.crt;
+    ssl_certificate_key /etc/nginx/ssl/{{ domain_name }}.key;
+
+    include /etc/nginx/conf.d/ssl_params.conf;
+
+    # If someone tries to force http endpoint over HTTPS, send them back to HTTP
+    location = /nossl { return 301 http://$host$request_uri; }
+    location = /neverssl { return 301 http://$host$request_uri; }
+    location = /http  { return 301 http://$host$request_uri; }
+
+    # Static files
+    include /etc/nginx/snippets/static.conf;
+
+    # Jellyfin
+    include /etc/nginx/snippets/jellyfin.conf;
+
+    # Catch-all fallback
+    location / {
+      return 404;
+    }
+  }
+}

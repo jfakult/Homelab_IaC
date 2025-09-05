@@ -10,6 +10,26 @@
     dest: /opt/authentik/docker-compose.yml
     mode: "0644"
 
+- name: Install Postgres client tools
+  apt:
+    name: postgresql-client
+    state: present
+    update_cache: yes
+
+- name: Wait for DB reachable from SSO
+  wait_for:
+    host: "{{ hostvars['db'].ansible_host }}"
+    port: 5432
+    timeout: 120
+
+- name: Wait for DB ready (pg_isready)
+  shell: pg_isready -h {{ hostvars['db'].ansible_host }} -p 5432 -U {{ pg_user_authentik }}
+  register: pg_ready
+  until: pg_ready.rc == 0
+  retries: 30
+  delay: 2
+  changed_when: false
+
 - name: Up Authentik
   shell: docker compose up -d
   args: { chdir: /opt/authentik }
@@ -22,3 +42,15 @@
   retries: 40
   delay: 3
   until: _ak.status == 200
+
+- name: Ensure Authentik admin user + password
+  shell: |
+    # Try to create (works only on fresh DB); on "already exists", reset password.
+    docker exec authentik ak create superuser \
+      --username "{{ authentik_admin_username | default('akadmin') }}" \
+      --email "{{ authentik_bootstrap_email }}" \
+      --password "{{ authentik_bootstrap_password }}" \
+    || printf "%s\n%s\n" "{{ authentik_bootstrap_password }}" "{{ authentik_bootstrap_password }}" \
+       | docker exec -i authentik ak changepassword "{{ authentik_admin_username | default('akadmin') }}"
+  no_log: true
+  changed_when: false

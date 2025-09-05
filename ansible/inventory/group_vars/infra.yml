@@ -10,10 +10,10 @@ pg_allowed_cidrs:
   - "192.168.1.205/32"   # Webapps
 
 
-# sso:
-authentik_domain: "sso.fakult.net"
+# sso (204):
+authentik_domain: "sso.fakult.net"   # also defined in external
 authentik_secret_key: "{{ vault_authentik_secret_key }}"
-authentik_bootstrap_email: "admin@example.com"
+authentik_bootstrap_email: "jfakult15@gmail.com"
 authentik_bootstrap_password: "{{ vault_authentik_bootstrap_pw }}"
 
 # external DB (on 203)
@@ -22,3 +22,15 @@ pg_port: "5432"
 pg_db: "authentik"
 pg_user: "authentik"
 pg_password: "{{ vault_pg_password_authentik }}"
+
+# Bastion (201)
+tls_mode: "mkcert"      # mkcert | letsencrypt
+tls_cert_path: "/etc/nginx/tls/{{ gateway_domain_root }}.crt"
+tls_key_path:  "/etc/nginx/tls/{{ gateway_domain_root }}.key"
+
+sso_base_url: "https://{{ authentik_domain }}"
+forward_auth_path: "/outpost.goauthentik.io/auth/nginx"
+
+# demo hostnames
+whoami_server_name: "whoami.{{ gateway_domain_root }}"
+files_server_name:  "files.{{ gateway_domain_root }}"

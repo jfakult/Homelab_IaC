@@ -6,6 +6,7 @@
   roles:
     - base
 
+# Setup critical infrastructure (DB, SSO, Bastion). Order matters
 - name: Configure DB
   hosts: db
   become: true
@@ -32,3 +33,12 @@
     - import_tasks: roles/misc/tasks/install_docker_and_compose.yml
   roles:
     - bastion
+
+- name: Configure Media Server
+  hosts: media
+  become: true
+  become_method: sudo
+  pre_tasks:
+    - import_tasks: roles/misc/tasks/install_docker_and_compose.yml
+  roles:
+    - media

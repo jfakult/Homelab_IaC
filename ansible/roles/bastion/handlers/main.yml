@@ -1,3 +1,10 @@
 # roles/bastion/handlers/main.yml
 - name: Reload nginx
   shell: docker exec rp-nginx nginx -s reload
+  ignore_errors: true
+
+- name: Reload nginx docker
+  # restart rp-nginx with the new compose file
+  shell: docker compose restart nginx
+  args: { chdir: /opt/gateway }
+  ignore_errors: true
