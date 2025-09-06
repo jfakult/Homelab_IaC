@@ -1,0 +1,7 @@
+- name: Install acme.sh
+  shell: |
+    curl https://get.acme.sh | sh
+  args:
+    creates: /root/.acme.sh/acme.sh
+  tags:
+    - dns_cert

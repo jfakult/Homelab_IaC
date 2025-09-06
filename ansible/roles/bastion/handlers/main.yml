@@ -5,6 +5,6 @@
 
 - name: Reload nginx docker
   # restart rp-nginx with the new compose file
-  shell: docker compose restart nginx
+  shell: docker compose restart
   args: { chdir: /opt/gateway }
   ignore_errors: true

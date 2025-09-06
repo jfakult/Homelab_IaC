@@ -1,0 +1,12 @@
+127.0.0.1        localhost
+::1              localhost
+
+# Managed by Ansible
+{% for host, vars in hostvars.items() %}
+{{ vars.ansible_host | default('') }} {{ host }}
+{% endfor %}
+
+# Managed by Ansible
+{% for host, vars in hostvars.items() %}
+{{ vars.ansible_host | default('') }} {{ host }}.fakult.net
+{% endfor %}

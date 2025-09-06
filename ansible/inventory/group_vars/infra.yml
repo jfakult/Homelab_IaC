@@ -31,6 +31,12 @@ tls_key_path:  "/etc/nginx/tls/{{ gateway_domain_root }}.key"
 sso_base_url: "https://{{ authentik_domain }}"
 forward_auth_path: "/outpost.goauthentik.io/auth/nginx"
 
-# demo hostnames
-whoami_server_name: "whoami.{{ gateway_domain_root }}"
-files_server_name:  "files.{{ gateway_domain_root }}"
+nord_country: "united_states"
+nord_city: "buffalo"
+dns_base: /opt/dns
+unbound_listen_ip: "127.0.0.1"
+unbound_port: 5335
+unbound_rrset_cache: "256m"
+unbound_msg_cache: "128m"
+unbound_root_hints: "{{ dns_base | default('/opt/dns') }}/unbound/root.hints"
+tz: "America/New_York"

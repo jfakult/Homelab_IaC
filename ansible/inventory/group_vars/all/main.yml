@@ -3,3 +3,9 @@ gateway_domain_root: "fakult.net"
 ansible_user: ubuntu
 ansible_become: true
 ansible_become_method: sudo
+
+sso_fqdn: "sso.fakult.net"   # also defined in infra
+pki_build_dir: "./pki-out"
+
+ak_compose_dir: "/opt/authentik"
+ak_discovery_dir: "{{ ak_compose_dir }}/certs/{{ sso_fqdn }}"

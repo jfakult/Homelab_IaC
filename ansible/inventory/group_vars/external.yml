@@ -1,6 +1,6 @@
 domain_name: "fakult.net"
 
-authentik_domain: "sso.fakult.net"   # also defined in infra
+authentik_domain: "{{ sso_fqdn }}"   # also defined in infra
 
 # Bastion (201)
 tls_mode: "mkcert"      # mkcert | letsencrypt
@@ -13,6 +13,11 @@ forward_auth_path: "/outpost.goauthentik.io/auth/nginx"
 ssl_dir: "/etc/nginx/ssl"
 ssl_cert: "{{ ssl_dir }}/{{ domain_name }}.crt"
 ssl_key: "{{ ssl_dir }}/{{ domain_name }}.key"
+
+sso_cert_path: "{{ ssl_dir }}/{{ authentik_domain }}.crt"
+sso_key_path:  "{{ ssl_dir }}/{{ authentik_domain }}.key"
+
+jellyfin_container: "jellyfin"
 
 # demo hostnames
 whoami_server_name: "whoami.{{ gateway_domain_root }}"

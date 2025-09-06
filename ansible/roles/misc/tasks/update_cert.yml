@@ -1,0 +1,22 @@
+- name: Remove cached Name.com creds from acme.sh account.conf
+  lineinfile:
+    path: /root/.acme.sh/account.conf
+    state: absent
+    regexp: '^NAMECOM_'
+  tags:
+    - dns_cert
+
+- name: Issue or renew cert for {{ acme_fqdn }}
+  shell: |
+    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt --issue --dns dns_namecom \
+      -d {{ acme_fqdn }} \
+      --key-file       /etc/ssl/{{ acme_fqdn }}.key \
+      --fullchain-file /etc/ssl/{{ acme_fqdn }}.crt \
+      #--reloadcmd     "nginx -s reload"
+  args:
+    creates: /etc/ssl/{{ acme_fqdn }}.crt
+  environment:
+    Namecom_Username: "{{ namedotcom_username }}"
+    Namecom_Token: "{{ namedotcom_api_token }}"
+  tags:
+    - dns_cert

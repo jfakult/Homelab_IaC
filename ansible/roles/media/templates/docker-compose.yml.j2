@@ -11,6 +11,8 @@ services:
     volumes:
       - {{ media_paths.config }}:/config
       - {{ media_paths.cache }}:/cache
+      - /etc/hosts:/etc/hosts:ro
+      - /etc/resolv.conf:/etc/resolv.conf:ro
 
       # Media libraries (mount as subfolders under /media)
       - type: bind

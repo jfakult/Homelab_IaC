@@ -39,6 +39,8 @@ services:
       AUTHENTIK_POSTGRESQL__PASSWORD: {{ pg_password }}
       AUTHENTIK_REDIS__HOST: redis
       AUTHENTIK_REDIS__PORT: "6379"
+    volumes:
+      - {{ ak_compose_dir }}/certs:/certs:ro
 
   redis:
     image: redis:7-alpine

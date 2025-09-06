@@ -1,0 +1,30 @@
+- name: Ensure local PKI build dir exists
+  delegate_to: localhost
+  run_once: true
+  file:
+    path: "{{ pki_build_dir }}"
+    state: directory
+    mode: "0700"
+  tags: [pki]
+
+- name: Create self-signed cert for {{ sso_fqdn }} (if missing)
+  delegate_to: localhost
+  run_once: true
+  shell: |
+    openssl req -x509 -nodes -newkey rsa:4096 -days 825 \
+      -subj "/CN={{ sso_fqdn }}" \
+      -addext "subjectAltName=DNS:{{ sso_fqdn }}" \
+      -keyout {{ pki_build_dir }}/{{ sso_fqdn }}.key \
+      -out   {{ pki_build_dir }}/{{ sso_fqdn }}.crt
+  args:
+    creates: "{{ pki_build_dir }}/{{ sso_fqdn }}.crt"
+  tags: [pki]
+
+- name: Ensure fullchain exists (self-signed → fullchain == cert)
+  delegate_to: localhost
+  run_once: true
+  copy:
+    src: "{{ pki_build_dir }}/{{ sso_fqdn }}.crt"
+    dest: "{{ pki_build_dir }}/fullchain-{{ sso_fqdn }}.pem"
+    mode: "0644"
+  tags: [pki]

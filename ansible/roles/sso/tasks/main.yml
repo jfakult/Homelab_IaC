@@ -1,3 +1,3 @@
 ---
 
-- include_tasks: sso.yml
+- import_tasks: sso.yml

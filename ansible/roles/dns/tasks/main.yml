@@ -1,9 +1,149 @@
-pre_tasks:
-  import_tasks: misc/tasks/install_docker_and_compose.yml
+- name: Ensure base dirs
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ dns_base }}"
+    - "{{ dns_base }}/unbound"
+    - "{{ dns_base }}/etc-pihole"
+    - "{{ dns_base }}/etc-dnsmasq.d"
 
-tasks:
-  - name: Drop vhosts
-    template:
-      src: server_whoami.conf.j2
-      dest: /etc/nginx/conf.d/whoami.conf
-    #notify: Reload nginx
+- name: Deploy Pi-hole upstream DNS config
+  template:
+    src: pihole_dnsmasq.conf.j2
+    dest: "{{ dns_base }}/etc-pihole/dnsmasq.conf"
+    mode: "0644"
+
+- name: Disconnect Nord (avoid resolv.conf races)
+  command: nordvpn disconnect
+  failed_when: false
+
+# keep DNS working while we flip resolved off
+- name: Preseed resolv.conf with public resolvers
+  copy:
+    dest: /etc/resolv.conf
+    content: |
+      nameserver 9.9.9.9
+      nameserver 1.1.1.1
+  become: yes
+
+- name: Disable and stop systemd-resolved
+  systemd:
+    name: systemd-resolved
+    enabled: no
+    state: stopped
+  become: yes
+
+- name: Render Unbound config
+  template:
+    src: unbound.conf.j2
+    dest: "{{ dns_base }}/unbound/unbound.conf"
+    mode: "0644"
+
+#- name: Fetch root.hints
+#  get_url:
+#    url: https://www.internic.net/domain/named.root
+#    dest: "{{ unbound_root_hints }}"
+#    mode: "0644"
+
+- name: Template docker-compose.yml (file-only mounts for Unbound)
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ dns_base }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Bring up stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ dns_base }}"
+    state: present
+
+# ===== readiness checks via variables =====
+- name: Wait for Unbound to listen
+  wait_for:
+    host: "{{ unbound_listen_ip }}"
+    port: "{{ unbound_port }}"
+    timeout: 60
+
+- name: Wait for Pi-hole DNS to listen
+  wait_for:
+    host: "127.0.0.1"
+    port: "53"
+    timeout: 60
+
+- name: Wait for Pi-hole web to be up
+  wait_for:
+    host: 127.0.0.1
+    port: 80
+    timeout: 60
+
+- name: Set Pi-hole admin password securely
+  no_log: true
+  shell: docker exec dns-pihole-1 pihole setpassword "{{ pihole_web_pw }}"
+  register: set_pw
+  changed_when: "'New password set' in set_pw.stdout or 'New password set' in set_pw.stderr"
+
+
+- name: Point resolv.conf to local Pi-hole
+  copy:
+    dest: /etc/resolv.conf
+    content: "nameserver 127.0.0.1\n"
+    mode: "0644"
+  become: yes
+
+# ===== NordVPN (idempotent) =====
+- name: Check if NordVPN CLI is installed
+  stat:
+    path: /usr/bin/nordvpn
+  register: nordvpn_bin
+
+- name: Install NordVPN CLI if missing
+  shell: curl -sSf https://downloads.nordcdn.com/apps/linux/install.sh | sh
+  args: { executable: /bin/bash }
+  when: not nordvpn_bin.stat.exists
+
+- name: Check Nord account/login state
+  command: nordvpn account
+  register: nv_account
+  failed_when: false
+  changed_when: false
+
+- name: Login with token (only if not logged in)
+  command: nordvpn login --token {{ nordvpn_login_token }}
+  when: nv_account.rc != 0
+
+- name: Base settings
+  command: nordvpn set {{ item }}
+  loop:
+    - "technology nordlynx"
+    - "lan-discovery enable"
+    - "autoconnect on"
+    - "threatprotectionlite off"
+    - "dns 127.0.0.1"
+  ignore_errors: true   # ignore if already set
+
+- name: Apply NordVPN base settings idempotently
+  command: nordvpn set {{ item.key }} {{ item.val }}
+  register: nv_set
+  loop:
+    - { key: technology,    val: nordlynx }
+    - { key: autoconnect,   val: on }
+    - { key: lan-discovery, val: enable }
+  changed_when: >
+    nv_set.rc == 0 and
+    ('already set' not in (nv_set.stdout | lower))
+  failed_when: >
+    nv_set.rc not in [0,1] or
+    (nv_set.rc == 1 and 'already set' not in (nv_set.stdout | lower))
+
+- name: Reconnect Nord (avoid resolv.conf races)
+  command: nordvpn connect
+  failed_when: false
+
+- name: Wait for NordVPN to be connected
+  shell: nordvpn status | grep ' Connected'
+  register: nv_status
+  retries: 10
+  delay: 3
+  until: nv_status.rc == 0
+  changed_when: false

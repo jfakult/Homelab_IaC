@@ -75,6 +75,14 @@
 - name: Allow SSH
   ufw: { rule: allow, port: "22", proto: tcp }
 
+- name: Allow SSH from LAN
+  ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+    src: "192.168.0.0/16"
+
+
 - name: Allow Postgres only from SSO
   ufw:
     rule: allow

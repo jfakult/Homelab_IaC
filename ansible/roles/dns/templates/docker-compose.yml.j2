@@ -1,4 +1,21 @@
-  whoami:
-    image: traefik/whoami:latest
-    container_name: whoami
+services:
+  unbound:
+    image: mvance/unbound:latest
+    network_mode: host
     restart: unless-stopped
+    volumes:
+      - {{ dns_base }}/unbound/unbound.conf:/opt/unbound/etc/unbound/unbound.conf:ro
+
+  pihole:
+    image: pihole/pihole:latest
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      TZ: {{ tz | default('America/New_York') }}
+      PIHOLE_DNS_: "{{ unbound_listen_ip | default('127.0.0.1') }}#{{ unbound_port | default(5335) }}"
+    volumes:
+      - {{ dns_base }}/etc-pihole:/etc/pihole
+      - {{ dns_base }}/etc-pihole/dnsmasq.conf:/etc/pihole/dnsmasq.conf
+      #- {{ dns_base }}/etc-dnsmasq.d/10-static.conf:/etc/dnsmasq.d/10-static.conf
+      - {{ dns_base }}/etc-dnsmasq.d:/etc/dnsmasq.d
+      - /etc/hosts:/etc/hosts:ro

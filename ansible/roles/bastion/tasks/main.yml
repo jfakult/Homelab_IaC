@@ -46,7 +46,7 @@
     src: docker-compose.yml.j2
     dest: /opt/gateway/docker-compose.yml
     mode: "0644"
-    notify: Reload nginx docker
+  notify: Reload nginx docker
 
 - name: Check if rp-nginx container is running
   command: docker ps --filter "name=rp-nginx" --filter "status=running" --format "{{'{{.Names}}'}}"

@@ -1,3 +1,19 @@
 ---
 
 - include_tasks: keyboard.yml
+
+- name: Deploy /etc/hosts
+  template:
+    src: ../../misc/templates/hosts.j2
+    dest: /etc/hosts
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Deploy /etc/resolv.conf
+  template:
+    src: ../../misc/templates/resolv.conf
+    dest: /etc/resolv.conf
+    owner: root
+    group: root
+    mode: '0644'

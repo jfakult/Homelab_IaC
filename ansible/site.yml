@@ -5,6 +5,17 @@
   become_method: sudo
   roles:
     - base
+  tags:
+    - base
+    - tested
+
+- name: Setup local ssl certs
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - local_pki
+  tags:
+    - tested
 
 # Setup critical infrastructure (DB, SSO, Bastion). Order matters
 - name: Configure DB
@@ -15,6 +26,8 @@
     - import_tasks: roles/misc/tasks/install_docker_and_compose.yml
   roles:
     - db
+  tags:
+    - tested
 
 - name: Configure SSO
   hosts: sso
@@ -24,6 +37,8 @@
     - import_tasks: roles/misc/tasks/install_docker_and_compose.yml
   roles:
     - sso
+  tags:
+    - tested
 
 - name: Configure Bastion
   hosts: bastion
@@ -33,6 +48,19 @@
     - import_tasks: roles/misc/tasks/install_docker_and_compose.yml
   roles:
     - bastion
+  tags:
+    - tested
+
+- name: Configure DNS
+  hosts: dns
+  become: true
+  become_method: sudo
+  pre_tasks:
+    - import_tasks: roles/misc/tasks/install_docker_and_compose.yml
+  roles:
+    - dns
+  tags:
+    - tested
 
 - name: Configure Media Server
   hosts: media
