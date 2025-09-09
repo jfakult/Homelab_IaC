@@ -40,6 +40,7 @@
   with_filetree: "templates/nginx/"
   when: item.state == 'file'
   notify: Reload nginx
+  tags: test
 
 - name: Drop compose
   template:
@@ -71,3 +72,17 @@
   register: ngchk
   failed_when: ngchk.rc != 0
   changed_when: false
+
+- name: Mount NAS Webapp Share
+  import_tasks: ../../misc/tasks/install_nas_reqs.yml
+  vars:
+    local_mount_path: /srv/www
+    nas_share_path: /mnt/user/Server_WebappsCache
+    mount_opts: "{{ bastion_mount_opts }}"
+
+- name: Mount NAS Webapp Share
+  import_tasks: ../../misc/tasks/install_nas_reqs.yml
+  vars:
+    local_mount_path: /srv/nas
+    nas_share_path: /mnt/user/Server_WebappsArray
+    mount_opts: "{{ bastion_mount_opts }}"

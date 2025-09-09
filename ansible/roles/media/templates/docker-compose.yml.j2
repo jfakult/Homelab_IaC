@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   jellyfin:
     image: jellyfin/jellyfin
@@ -7,21 +6,18 @@ services:
     network_mode: "host"
     restart: "unless-stopped"
     environment:
-      - JELLYFIN_PublishedServerUrl={{ jellyfin_external_scheme }}://{{ jellyfin_external_host }}{{ jellyfin_base_path }}
+        - JELLYFIN_PublishedServerUrl={{ jellyfin_external_scheme }}://{{ jellyfin_external_host }}{{ jellyfin_base_path }}
+        - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+        - SSL_CERT_DIR=/etc/ssl/certs
     volumes:
-      - {{ media_paths.config }}:/config
+      - {{ media_paths.root_media }}:/media
+      - /srv/jellyfin_config:/config            # keep local for now
       - {{ media_paths.cache }}:/cache
+      - {{ media_paths.metadata }}:/metadata
       - /etc/hosts:/etc/hosts:ro
       - /etc/resolv.conf:/etc/resolv.conf:ro
-
-      # Media libraries (mount as subfolders under /media)
-      - type: bind
-        source: {{ media_paths.movies }}
-        target: /media/Movies
-      - type: bind
-        source: {{ media_paths.tv }}
-        target: /media/TV
-        read_only: true
+      - /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:rw
+      - /etc/ssl/certs:/etc/ssl/certs:rw    # hashed symlinks
 
       {% if jellyfin_fonts_dir is defined and jellyfin_fonts_dir %}
       # Optional fonts for subtitle burn-in

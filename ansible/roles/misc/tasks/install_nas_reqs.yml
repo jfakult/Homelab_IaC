@@ -1,0 +1,33 @@
+- name: Ensure NFS client
+  package:
+    name: "nfs-common"
+    state: present
+
+- name: Is {{ local_mount_path }} currently a mount point?
+  command: mountpoint -q {{ local_mount_path }}
+  register: mp
+  changed_when: false
+  failed_when: false
+
+- name: Ensure mountpoint exists {{ local_mount_path }}
+  file:
+    path: "{{ local_mount_path }}"
+    state: directory
+    mode: "2775"
+  when: mp.rc != 0
+
+# Media VM host_vars: set mount_opts=media_mount_opts
+# Bastion VM host_vars: set mount_opts=bastion_mount_opts
+- name: Add fstab entry {{ nas_share_path }} -> {{ local_mount_path }}
+  mount:
+    src: "{{ nas_ip }}:{{ nas_share_path }}"
+    path: "{{ local_mount_path }}"
+    fstype: nfs4
+    opts: "{{ mount_opts }}"
+    state: mounted
+
+
+# Note: if using root squash:
+# chown -R nobody:users  [dir]
+# find [dir] -type d -exec chmod 2775 {} \;
+# find [dir] -type f -exec chmod 0664 {} \;

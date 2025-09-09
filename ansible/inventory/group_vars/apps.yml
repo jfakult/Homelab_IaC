@@ -13,10 +13,14 @@ jellyfin_oidc:
   scopes: "openid profile email groups"
   discovery_url: "{{ authentik_base }}/application/o/jellyfin-oidc/.well-known/openid-configuration"
 media_paths:
-  movies: "/srv/media/Movies"
-  tv:     "/srv/media/TV"
-  config: "/srv/jellyfin/config"
-  cache:  "/srv/jellyfin/cache"
+  root_media: "/srv/media/"
+  root_media_array: "/srv/nas/"      # optional, for larger media collections
+  root_config: "/srv/config/"        # global config, contains cache, jellyfin config, and metadata
+  #movies: "/srv/media/Movies"
+  #tv:     "/srv/media/TV"
+  config: "{{ media_paths.root_config }}jellyfin/config"
+  cache:  "{{ media_paths.root_config }}jellyfin/cache"
+  metadata: "{{ media_paths.root_config }}jellyfin/metadata"
 ## optional extras (omit if you don't want them)
 #jellyfin_fonts_dir: "/srv/fonts"
 #jellyfin_extra_hosts:

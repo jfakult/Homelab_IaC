@@ -70,3 +70,13 @@
     - import_tasks: roles/misc/tasks/install_docker_and_compose.yml
   roles:
     - media
+  tags: tested
+
+- name: Configure Webapps Server
+  hosts: webapps
+  become: true
+  become_method: sudo
+  pre_tasks:
+    - import_tasks: roles/misc/tasks/install_docker_and_compose.yml
+  roles:
+    - webapps

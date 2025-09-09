@@ -7,11 +7,21 @@
     mode: "0755"
   loop:
     - "{{ jellyfin_compose_dir }}"
-    - "{{ media_paths.config }}"
-    - "{{ media_paths.cache }}"
-    - "{{ media_paths.movies }}"
-    - "{{ media_paths.tv }}"
-    #- "{{ jellyfin_fonts_dir | default('', true) }}"
+    - "/srv/jellyfin_config"
+
+- name: Mount NAS Media Share
+  import_tasks: ../../misc/tasks/install_nas_reqs.yml
+  vars:
+    local_mount_path: "{{ media_paths.root_media }}"
+    nas_share_path: /mnt/user/Server_Media
+    mount_opts: "{{ media_mount_opts }}"
+
+- name: Mount NAS Media metadata Share
+  import_tasks: ../../misc/tasks/install_nas_reqs.yml
+  vars:
+    local_mount_path: "{{ media_paths.root_config }}"
+    nas_share_path: /mnt/user/Server_MediaConfig
+    mount_opts: "{{ media_mount_opts }}"
 
 - name: Drop docker-compose.yml
   template:

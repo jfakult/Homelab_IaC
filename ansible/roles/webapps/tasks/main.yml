@@ -1,0 +1,51 @@
+- name: Ensure webapp directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  loop:
+    - /srv/webapps
+
+- name: Mount NAS Webapp Share
+  import_tasks: ../../misc/tasks/install_nas_reqs.yml
+  vars:
+    local_mount_path: /srv/www
+    nas_share_path: /mnt/user/Server_WebappsCache
+    mount_opts: "{{ webapps_mount_opts }}"
+
+- name: Mount NAS Media Share
+  import_tasks: ../../misc/tasks/install_nas_reqs.yml
+  vars:
+    local_mount_path: /srv/nas
+    nas_share_path: /mnt/user/Server_WebappsArray
+    mount_opts: "{{ webapps_mount_opts }}"
+
+- name: Ensure kiwix directory
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  loop:
+    - /opt/kiwix
+
+- name: Drop Kiwix compose
+  template:
+    src: docker-compose.yml.j2
+    dest: /opt/kiwix/docker-compose.yml
+    mode: "0644"
+  #notify: Restart kiwix docker
+
+- name: Check if kiwix container is running
+  command: docker ps --filter "name=kiwix" --filter "status=running" --format "{{'{{.Names}}'}}"
+  register: kiwix_ps
+  changed_when: false
+
+- name: Bring up kiwix stack
+  shell: docker compose up -d
+  args:
+    chdir: /opt/kiwix
+  when: kiwix_ps.stdout == ""

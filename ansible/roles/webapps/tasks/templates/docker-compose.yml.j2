@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  kiwix:
+    image: ghcr.io/kiwix/kiwix-serve:3.7.0
+    container_name: kiwix
+    restart: unless-stopped
+    entrypoint: /bin/sh
+    command: -c "
+      kiwix-manage /data/library.xml add /data/zim_array/*.zim &&
+      kiwix-manage /data/library.xml add /data/zim_cache/*.zim &&
+      exec kiwix-serve --port=3090 --library /data/library.xml"
+    volumes:
+      - /srv/nas/kiwix/zim:/data/zim_array:ro
+      - /srv/www/kiwix/zim:/data/zim_cache:ro
+      - /srv/nas/kiwix/library:/data   # persistent place for library.xml
+    ports:
+      - "3090:3090"
