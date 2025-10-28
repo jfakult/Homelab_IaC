@@ -1,0 +1,23 @@
+groups:
+- name: base
+  rules:
+  - alert: InstanceDown
+    expr: up == 0
+    for: 2m
+    labels: { severity: page }
+    annotations:
+      summary: "{% raw %}{{ $labels.instance }}{% endraw %} is down"
+
+  - alert: DiskSpaceLow
+    expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) < 0.10
+    for: 10m
+    labels: { severity: notify }
+    annotations:
+      summary: "Low disk space on {% raw %}{{ $labels.instance }}{% endraw %}"
+
+  - alert: TLSExpirySoon
+    expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 3
+    for: 10m
+    labels: { severity: notify }
+    annotations:
+      summary: "TLS expires soon ({% raw %}{{ $labels.instance }}{% endraw %})"

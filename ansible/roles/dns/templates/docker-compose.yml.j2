@@ -19,3 +19,38 @@ services:
       #- {{ dns_base }}/etc-dnsmasq.d/10-static.conf:/etc/dnsmasq.d/10-static.conf
       - {{ dns_base }}/etc-dnsmasq.d:/etc/dnsmasq.d
       - /etc/hosts:/etc/hosts:ro
+
+  pihole_exporter:
+    image: ekofr/pihole-exporter:latest
+    container_name: pihole_exporter
+    restart: unless-stopped
+    env_file:
+      - ./env/pihole_exporter.env
+    ports:
+      - "9617:9617"
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    # privileged: true
+
+  node_exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node_exporter
+    restart: unless-stopped
+    network_mode: host           # exposes directly on port 9100
+    pid: host                    # so it can see host PIDs
+    volumes:
+      - /:/host:ro,rslave
+    command:
+      - --path.rootfs=/host
+    ports:
+      - "9100:9100"              # optional; not needed with host network

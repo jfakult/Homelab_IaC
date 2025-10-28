@@ -33,3 +33,39 @@ services:
       - "{{ h }}"
     {% endfor %}
     {% endif %}
+
+  jellyfin_exporter:
+    image: rebelcore/jellyfin-exporter:latest
+    container_name: jellyfin_exporter
+    command:
+      - '--jellyfin.address=http://jellyfin:8096'
+      - '--jellyfin.token=TOKEN'
+    ports:
+      - 9594:9594
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    # privileged: true
+
+  node_exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node_exporter
+    restart: unless-stopped
+    network_mode: host           # exposes directly on port 9100
+    pid: host                    # so it can see host PIDs
+    volumes:
+      - /:/host:ro,rslave
+    command:
+      - --path.rootfs=/host
+    ports:
+      - "9100:9100"              # optional; not needed with host network

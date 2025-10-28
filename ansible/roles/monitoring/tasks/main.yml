@@ -1,0 +1,73 @@
+# Make /opt/monitoring directory
+- name: Create monitoring base directory
+  file:
+    path: "{{ monitoring_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Create monitoring directory
+  file:
+    path: "{{ monitoring_dir }}/{{ item }}"
+    state: directory
+    mode: '0775'
+  loop:
+    - alertmanager
+    - blackbox
+    - loki
+    - loki-data
+    - prometheus
+    - prometheus-data
+
+- name: Generate configs
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ monitoring_dir }}/{{ item.path | regex_replace('\\.j2$', '') }}"
+    owner: root
+    group: root
+    mode: '0644'
+    force: yes
+  with_filetree: "templates/monitoring/"
+  when: item.state == 'file'
+
+- name: Fix Prometheus data directory permissions
+  file:
+    path: /opt/monitoring/prometheus-data
+    owner: 65534
+    group: 65534
+    mode: "0775"
+    recurse: yes
+
+- name: Fix perms for grafana data directory
+  file:
+    path: /opt/monitoring/grafana
+    owner: 472
+    group: 472
+    mode: "0775"
+    recurse: yes
+
+- name: Fix perms for loki directory
+  file:
+    path: /opt/monitoring/loki
+    owner: 472
+    group: 472
+    mode: "0775"
+    recurse: yes
+
+- name: Fix perms for loki data directory
+  file:
+    path: /opt/monitoring/loki-data
+    owner: 472
+    group: 472
+    mode: "0775"
+    recurse: yes
+
+- name: Push monitoring docker-compose
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ monitoring_dir }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Startup monitoring stack
+  command: docker compose up -d
+  args:
+    chdir: "{{ monitoring_dir }}"

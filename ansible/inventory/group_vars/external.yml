@@ -22,3 +22,5 @@ jellyfin_container: "jellyfin"
 # demo hostnames
 whoami_server_name: "whoami.{{ gateway_domain_root }}"
 files_server_name:  "files.{{ gateway_domain_root }}"
+
+webapps_host: "{{ hostvars['apps']['webapps'] | default('192.168.1.205') }}"

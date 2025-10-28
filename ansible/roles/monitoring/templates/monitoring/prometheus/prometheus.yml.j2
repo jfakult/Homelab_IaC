@@ -1,0 +1,63 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # --- Node exporters (add when you deploy them) ---
+  - job_name: 'node'
+    static_configs:
+      - targets: ['192.168.1.200:9100', '192.168.1.201:9100','192.168.1.202:9100','192.168.1.205:9100','192.168.1.206:9100','192.168.1.211:9100']
+
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['192.168.1.200:9113']
+
+  - job_name: 'jellyfin'
+    static_configs:
+      - targets: ['192.168.1.206:9594']
+
+  #- job_name: 'pihole'
+  #  static_configs:
+  #    - targets: ['192.168.1.202:9617']
+
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['192.168.1.200:8080','192.168.1.202:8080','192.168.1.206:8080']
+
+  - job_name: 'blackbox_http'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://192.168.1.200
+          - http://192.168.1.206:8096
+          - http://192.168.1.202/admin
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  - job_name: 'blackbox_icmp'
+    metrics_path: /probe
+    params:
+      module: [icmp]
+    static_configs:
+      - targets:
+          - 192.168.1.200    # bastion
+          - 192.168.1.206    # media
+          - 192.168.1.202    # dns
+          - 192.168.1.211    # monitoring
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115

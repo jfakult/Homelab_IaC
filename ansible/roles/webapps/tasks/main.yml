@@ -1,3 +1,14 @@
+- name: Install NPM/Node 22 and fastapi
+  apt:
+    name:
+      - nodejs
+      - npm
+      - python3-fastapi
+      - python3-uvicorn
+    state: present
+    update_cache: yes
+  tags: test
+
 - name: Ensure webapp directories exist
   file:
     path: "{{ item }}"
@@ -37,15 +48,35 @@
     src: docker-compose.yml.j2
     dest: /opt/kiwix/docker-compose.yml
     mode: "0644"
-  #notify: Restart kiwix docker
+  tags: kiwix
+  notify: Restart kiwix docker
 
 - name: Check if kiwix container is running
   command: docker ps --filter "name=kiwix" --filter "status=running" --format "{{'{{.Names}}'}}"
   register: kiwix_ps
   changed_when: false
+  tags: kiwix
 
 - name: Bring up kiwix stack
   shell: docker compose up -d
   args:
     chdir: /opt/kiwix
+  tags: kiwix
   when: kiwix_ps.stdout == ""
+
+- name: Drop webappctl, gen and cleanup scripts
+  copy:
+    src: "{{ item.src }}"
+    dest: "/srv/{{ item.dest }}"
+    mode: "0755"
+  loop:
+    - { src: webappctl.sh, dest: webappctl.sh }
+    - { src: generate_web_daemons.sh, dest: generate_web_daemons.sh }
+    - { src: cleanup_web_daemons.sh, dest: cleanup_web_daemons.sh }
+
+# Webapps must be added manually. They are not on the NAS.
+- name: Run webappctl scan
+  command: /srv/webappctl.sh scan
+
+- name: Start webapps
+  command: /srv/webappctl.sh start

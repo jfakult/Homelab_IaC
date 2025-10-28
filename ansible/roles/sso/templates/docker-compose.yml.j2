@@ -55,3 +55,16 @@ services:
       - CMD-SHELL
       - redis-cli ping | grep PONG
       timeout: 3s
+
+  node_exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node_exporter
+    restart: unless-stopped
+    network_mode: host           # exposes directly on port 9100
+    pid: host                    # so it can see host PIDs
+    volumes:
+      - /:/host:ro,rslave
+    command:
+      - --path.rootfs=/host
+    ports:
+      - "9100:9100"              # optional; not needed with host network

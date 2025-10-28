@@ -26,7 +26,7 @@
   shell: pg_isready -h {{ hostvars['db'].ansible_host }} -p 5432 -U {{ pg_user_authentik }}
   register: pg_ready
   until: pg_ready.rc == 0
-  retries: 30
+  retries: 5
   delay: 2
   changed_when: false
 
@@ -39,8 +39,8 @@
     url: "http://127.0.0.1"
     status_code: 200
   register: _ak
-  retries: 40
-  delay: 3
+  retries: 5
+  delay: 2
   until: _ak.status == 200
 
 - name: Ensure discovery dir for {{ sso_fqdn }}

@@ -1,6 +1,6 @@
-location /jellyfin/ {
-  proxy_set_header X-Forwarded-Prefix /jellyfin;
-  proxy_pass http://{{ hostvars['media'].ansible_host }}:{{ jellyfin_port | default(8096) }};
+location /pihole/ {
+  proxy_set_header X-Forwarded-Prefix /pihole;
+  proxy_pass http://{{ hostvars['dns'].ansible_host }}:{{ pihole_port | default(80) }};
 
   proxy_set_header   Host              $host;
   proxy_set_header   X-Forwarded-Host  $host;
@@ -11,8 +11,4 @@ location /jellyfin/ {
 
   proxy_set_header Upgrade $http_upgrade;
   proxy_set_header Connection $connection_upgrade;
-}
-
-location = /jellyfin {
-  return 301 /jellyfin/;
 }

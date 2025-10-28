@@ -143,7 +143,7 @@
 - name: Wait for NordVPN to be connected
   shell: nordvpn status | grep ' Connected'
   register: nv_status
-  retries: 10
-  delay: 3
+  retries: 5
+  delay: 2
   until: nv_status.rc == 0
   changed_when: false

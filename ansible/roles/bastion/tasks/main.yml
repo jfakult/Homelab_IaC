@@ -12,6 +12,10 @@
     - /var/log/nginx
     - /opt/gateway
     - /srv/files
+    - /srv/webapps
+    #- /srv/www
+    #- /srv/nas
+    #- /srv/share
 
 - name: Check if cert already exists
   stat:
@@ -39,8 +43,8 @@
     force: yes
   with_filetree: "templates/nginx/"
   when: item.state == 'file'
-  notify: Reload nginx
-  tags: test
+  notify: Reload nginx docker
+  tags: nginx
 
 - name: Drop compose
   template:
@@ -48,6 +52,7 @@
     dest: /opt/gateway/docker-compose.yml
     mode: "0644"
   notify: Reload nginx docker
+  tags: nginx
 
 - name: Check if rp-nginx container is running
   command: docker ps --filter "name=rp-nginx" --filter "status=running" --format "{{'{{.Names}}'}}"
@@ -66,11 +71,13 @@
     port: 80
     delay: 2
     timeout: 120
+  tags: nginx
 
 - name: Validate nginx syntax (post-start)
   shell: docker exec rp-nginx nginx -t
   register: ngchk
   failed_when: ngchk.rc != 0
+  tags: nginx
   changed_when: false
 
 - name: Mount NAS Webapp Share
@@ -85,4 +92,11 @@
   vars:
     local_mount_path: /srv/nas
     nas_share_path: /mnt/user/Server_WebappsArray
+    mount_opts: "{{ bastion_mount_opts }}"
+
+- name: Mount NAS Public Share
+  import_tasks: ../../misc/tasks/install_nas_reqs.yml
+  vars:
+    local_mount_path: /srv/share
+    nas_share_path: /mnt/user/Public
     mount_opts: "{{ bastion_mount_opts }}"

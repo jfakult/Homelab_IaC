@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   kiwix:
     image: ghcr.io/kiwix/kiwix-serve:3.7.0
@@ -7,12 +5,24 @@ services:
     restart: unless-stopped
     entrypoint: /bin/sh
     command: -c "
-      kiwix-manage /data/library.xml add /data/zim_array/*.zim &&
-      kiwix-manage /data/library.xml add /data/zim_cache/*.zim &&
-      exec kiwix-serve --port=3090 --library /data/library.xml"
+      kiwix-manage /data/kiwix/zim_cache/library.xml add /data/kiwix/zim_array/*.zim;
+      kiwix-manage /data/kiwix/zim_cache/library.xml add /data/kiwix/zim_cache/*.zim;
+      exec kiwix-serve --port=3090 --library /data/kiwix/zim_cache/library.xml --urlRootLocation=/wikipedia"
     volumes:
-      - /srv/nas/kiwix/zim:/data/zim_array:ro
-      - /srv/www/kiwix/zim:/data/zim_cache:ro
-      - /srv/nas/kiwix/library:/data   # persistent place for library.xml
+      - /srv/nas/kiwix/zim:/data/kiwix/zim_array:ro
+      - /srv/www/kiwix/zim:/data/kiwix/zim_cache:rw
     ports:
       - "3090:3090"
+      
+  node_exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node_exporter
+    restart: unless-stopped
+    network_mode: host           # exposes directly on port 9100
+    pid: host                    # so it can see host PIDs
+    volumes:
+      - /:/host:ro,rslave
+    command:
+      - --path.rootfs=/host
+    ports:
+      - "9100:9100"              # optional; not needed with host network

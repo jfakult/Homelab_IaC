@@ -1,0 +1,5 @@
+- name: Restart kiwix docker
+  # restart kiwix with the new compose file
+  shell: docker compose up -d --force-recreate
+  args: { chdir: /opt/kiwix }
+  ignore_errors: true

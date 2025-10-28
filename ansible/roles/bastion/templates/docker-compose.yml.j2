@@ -9,6 +9,7 @@ services:
     volumes:
       - /srv/www:/usr/share/nginx/html:ro
       - /srv/nas:/usr/share/nginx/nas:ro
+      - /srv/share:/usr/share/nginx/share:ro
       - /etc/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - /etc/nginx/conf.d:/etc/nginx/conf.d:ro
       - /etc/nginx/snippets:/etc/nginx/snippets:ro
@@ -18,6 +19,42 @@ services:
       - /etc/resolv.conf:/etc/resolv.conf:ro
     healthcheck:
       test: ["CMD","nginx","-t"]
-      interval: 30s
+      interval: 5s
       timeout: 5s
-      retries: 3
+      retries: 5
+
+  nginx_exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: nginx_exporter
+    restart: unless-stopped
+    command:
+      - -nginx.scrape-uri=http://127.0.0.1:8081/nginx_status
+    ports:
+      - "9113:9113"
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    # If metrics look sparse on cgroup v2, uncomment:
+    # privileged: true
+
+  node_exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node_exporter
+    restart: unless-stopped
+    network_mode: host           # exposes directly on port 9100
+    pid: host                    # so it can see host PIDs
+    volumes:
+      - /:/host:ro,rslave
+    command:
+      - --path.rootfs=/host
+    ports:
+      - "9100:9100"              # optional; not needed with host network

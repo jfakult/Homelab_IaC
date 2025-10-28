@@ -15,8 +15,11 @@ http {
 
   map $http_upgrade $connection_upgrade { default upgrade; '' close; }
 
-  # Reusable proxy headers (so you don’t repeat in each block)
+  # Reusable proxy headers
   include /etc/nginx/conf.d/proxy_common.conf;
+
+  # Metrics endpoint for Prometheus scraping
+  include /etc/nginx/conf.d/metrics.conf;
 
   server {
     listen 80;
@@ -62,24 +65,26 @@ http {
     # Static files
     include /etc/nginx/snippets/static.conf;
 
-    # Jellyfin
+    # Proxied services
+    include /etc/nginx/snippets/dns.conf;
+    include /etc/nginx/snippets/monitoring.conf;
     include /etc/nginx/snippets/jellyfin.conf;
+    include /etc/nginx/snippets/kiwix.conf;     # port 3090
+    include /etc/nginx/snippets/nodeJS_servers.conf;     # port 3090
 
-    location /wikipedia {
-      proxy_pass http://192.168.1.205:3090;
-      proxy_http_version 1.1;
-      proxy_set_header Upgrade $http_upgrade;
-      proxy_set_header Connection "upgrade";
-      proxy_set_header Host $host;
-    }
+    location /share {
+		alias /usr/share/nginx/share;   # mounted NAS share
+		autoindex on;
 
-    location /wiki {
-      return 301 /wikipedia;
-    }
+		add_header 'Access-Control-Allow-Origin' '*';
+        	add_header 'Access-Control-Allow-Credentials' 'true';
+        	add_header 'Access-Control-Allow-Methods' 'GET';
+        	add_header 'Access-Control-Allow-Headers' 'DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type';
+	}
 
     # Catch-all fallback
     location / {
-        root /usr/share/nginx/html;          # serves /srv/www$uri
+        root /usr/share/nginx/html;
         try_files $uri $uri/ =404;    # only existing files; otherwise 404
         autoindex off;
     }

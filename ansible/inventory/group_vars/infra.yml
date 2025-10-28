@@ -9,7 +9,6 @@ pg_allowed_cidrs:
   - "192.168.1.204/32"   # SSO
   - "192.168.1.205/32"   # Webapps
 
-
 # sso (204):
 authentik_domain: "sso.fakult.net"   # also defined in external
 authentik_secret_key: "{{ vault_authentik_secret_key }}"

@@ -80,3 +80,21 @@
     - import_tasks: roles/misc/tasks/install_docker_and_compose.yml
   roles:
     - webapps
+
+- name: Configure Compute Server
+  hosts: compute
+  become: true
+  become_method: sudo
+  pre_tasks:
+    - import_tasks: roles/misc/tasks/install_docker_and_compose.yml
+  roles:
+    - compute
+
+- name: Configure Monitoring Server
+  hosts: monitoring
+  become: true
+  become_method: sudo
+  pre_tasks:
+    - import_tasks: roles/misc/tasks/install_docker_and_compose.yml
+  roles:
+    - monitoring
