@@ -1,0 +1,24 @@
+# In /home/ubuntu, create AI dir and inside: apps, data, models, outputs
+- name: Create AI directory structure
+  file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - /home/ubuntu/AI
+    - /home/ubuntu/AI/apps
+    - /home/ubuntu/AI/data
+    - /home/ubuntu/AI/models
+    - /home/ubuntu/AI/outputs
+    - /home/ubuntu/AI/apps/Fooocus
+    #- /home/ubuntu/AI/apps/whisper
+
+# Install python3 and pip
+- name: Install python3 and pip
+  apt:
+    name:
+      - python3
+      - python3-pip
+      #- python3-whisper
+      - ffmpeg
+    state: present
+    update_cache: yes

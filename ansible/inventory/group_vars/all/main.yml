@@ -7,14 +7,13 @@ ansible_become_method: sudo
 sso_fqdn: "sso.fakult.net"   # also defined in infra
 pki_build_dir: "./pki-out"
 
-ak_compose_dir: "/opt/authentik"
-ak_discovery_dir: "{{ ak_compose_dir }}/certs/{{ sso_fqdn }}"
+pocket_id_compose_dir: "/opt/pocket-id"
 
 nas_ip: "192.168.1.199"
 
-media_mount_opts:   "rw,hard,nconnect=8,vers=4.2,noatime,rsize=1048576,wsize=1048576,x-systemd.automount,_netdev,nofail"
-webapps_mount_opts: "rw,hard,nconnect=8,vers=4.2,noatime,rsize=1048576,wsize=1048576,x-systemd.automount,_netdev,nofail"
-bastion_mount_opts: "ro,hard,nconnect=8,vers=4.2,noatime,rsize=1048576,wsize=1048576,x-systemd.automount,_netdev,nofail"
+media_mount_opts:   "rw,hard,nconnect=8,vers=4.2,noatime,rsize=1048576,wsize=1048576,noauto,x-systemd.automount,_netdev,nofail,mount-timeout=10s,x-systemd.idle-timeout=20"
+webapps_mount_opts: "rw,hard,nconnect=8,vers=4.2,noatime,rsize=1048576,wsize=1048576,noauto,x-systemd.automount,_netdev,nofail"
+bastion_mount_opts: "ro,hard,nconnect=8,vers=4.2,noatime,rsize=1048576,wsize=1048576,noauto,x-systemd.automount,_netdev,nofail"
 
 
 pihole_api_token: "VAULT_PIHOLE_TOKEN"

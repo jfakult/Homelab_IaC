@@ -1,0 +1,1 @@
+ansible-playbook -J -i inventory/hosts.ini site.yml --limit misc

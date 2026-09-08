@@ -1,0 +1,9 @@
+[Unit]
+Description=Renew Let's Encrypt certificates and reload Nginx
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/certbot renew --quiet
+ExecStartPost=/bin/systemctl reload nginx

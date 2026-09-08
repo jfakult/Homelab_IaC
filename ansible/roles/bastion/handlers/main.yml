@@ -8,3 +8,8 @@
   shell: docker compose up -d
   args: { chdir: /opt/gateway }
   ignore_errors: true
+
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: yes
+  become: yes

@@ -1,4 +1,14 @@
+# Reroute /plex to the Jellyfin server
+
+location /plex {
+  allow all;
+
+  return 301 https://$host/jellyfin/;
+}
+
 location /jellyfin/ {
+  allow all;
+  
   proxy_set_header X-Forwarded-Prefix /jellyfin;
   proxy_pass http://{{ hostvars['media'].ansible_host }}:{{ jellyfin_port | default(8096) }};
 

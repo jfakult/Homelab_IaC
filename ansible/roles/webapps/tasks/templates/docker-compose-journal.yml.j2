@@ -1,0 +1,60 @@
+services:
+  blinko-website:
+    image: ghcr.io/jfakult/blinko-journal:latest
+    container_name: blinko-website
+
+    environment:
+      NODE_ENV: production
+      NEXTAUTH_URL: https://fakult.net/journal
+      NEXT_PUBLIC_BASE_URL: https://fakult.net/journal
+      NEXTAUTH_SECRET: {{ blinko_nextauth_secret }}
+      DATABASE_URL: postgresql://postgres:{{ blinko_postgres_password }}@postgres:5432/postgres
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    ports:
+      - "1111:1111"
+
+    restart: unless-stopped
+
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:1111/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+    volumes:
+      - blinko-data:/app/.blinko
+
+  postgres:
+    image: postgres:14
+    container_name: blinko-postgres
+
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: {{ blinko_postgres_password }}
+
+    restart: unless-stopped
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  blinko-data:
+  postgres-data:

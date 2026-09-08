@@ -2,6 +2,11 @@
 
 - include_tasks: keyboard.yml
 
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+  tags: hostname
+
 - name: Deploy /etc/hosts
   template:
     src: ../../misc/templates/hosts.j2
@@ -17,3 +22,41 @@
     owner: root
     group: root
     mode: '0644'
+
+- name: Stat tailscale binary
+  ansible.builtin.stat:
+    path: /usr/sbin/tailscale
+  register: tailscale_bin
+  tags: tailscale
+
+- name: Install tailscale via script if missing or older than 30 days
+  ansible.builtin.shell: |
+    curl -fsSL https://tailscale.com/install.sh | sh
+  when: >
+    not tailscale_bin.stat.exists
+    or (ansible_date_time.epoch | int - tailscale_bin.stat.mtime | int) > (30 * 86400)
+  tags: tailscale
+
+- name: Stat tailscale state file
+  ansible.builtin.stat:
+    path: /var/lib/tailscale/tailscaled.state
+  register: tailscale_state
+  tags: tailscale
+
+- name: Delete tailscale state if empty
+  ansible.builtin.file:
+    path: /var/lib/tailscale/tailscaled.state
+    state: absent
+  when:
+    - tailscale_auth_key is defined
+    - tailscale_state.stat.exists
+    - tailscale_state.stat.size <= 2
+  tags: tailscale
+
+- name: Bring tailscale up using pre-shared key
+  ansible.builtin.shell: |
+    tailscale up --authkey {{ tailscale_auth_key }} --hostname {{ inventory_hostname }}
+  args:
+    creates: /var/lib/tailscale/tailscaled.state
+  when: tailscale_auth_key is defined
+  tags: tailscale

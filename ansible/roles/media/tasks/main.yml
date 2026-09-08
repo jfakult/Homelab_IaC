@@ -23,12 +23,12 @@
     nas_share_path: /mnt/user/Server_Media
     mount_opts: "{{ media_mount_opts }}"
 
-- name: Mount NAS Media metadata Share
-  import_tasks: ../../misc/tasks/install_nas_reqs.yml
-  vars:
-    local_mount_path: "{{ media_paths.root_config }}"
-    nas_share_path: /mnt/user/Server_MediaConfig
-    mount_opts: "{{ media_mount_opts }}"
+#- name: Mount NAS Media metadata Share
+#  import_tasks: ../../misc/tasks/install_nas_reqs.yml
+#  vars:
+#    local_mount_path: "{{ media_paths.root_config }}"
+#    nas_share_path: /mnt/user/Server_MediaConfig
+#    mount_opts: "{{ media_mount_opts }}"
 
 - name: Drop docker-compose.yml
   template:

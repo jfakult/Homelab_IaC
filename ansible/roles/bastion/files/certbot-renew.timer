@@ -1,0 +1,7 @@
+[Timer]
+# Every Sunday at 02:30
+OnCalendar=Sun 02:30
+Persistent=true
+
+[Install]
+WantedBy=timers.target

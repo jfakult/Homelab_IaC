@@ -1,60 +1,28 @@
 services:
-  authentik:
-    image: ghcr.io/goauthentik/server:latest
-    container_name: authentik
+  pocket-id:
+    image: ghcr.io/pocket-id/pocket-id:v2
+    container_name: pocket-id
     restart: unless-stopped
-    command: server
-    depends_on:
-      redis:
-        condition: service_healthy
     environment:
-      AUTHENTIK_SECRET_KEY: {{ authentik_secret_key }}
-      AUTHENTIK_POSTGRESQL__HOST: {{ pg_host }}
-      AUTHENTIK_POSTGRESQL__PORT: "{{ pg_port }}"
-      AUTHENTIK_POSTGRESQL__NAME: {{ pg_db }}
-      AUTHENTIK_POSTGRESQL__USER: {{ pg_user }}
-      AUTHENTIK_POSTGRESQL__PASSWORD: {{ pg_password }}
-      AUTHENTIK_BOOTSTRAP_EMAIL: {{ authentik_bootstrap_email }}
-      AUTHENTIK_BOOTSTRAP_PASSWORD: {{ authentik_bootstrap_password }}
-      AUTHENTIK_REDIS__HOST: redis
-      AUTHENTIK_REDIS__PORT: "6379"
-    ports:
-      - "80:9000"
-      - "443:9443"
-
-  worker:
-    image: ghcr.io/goauthentik/server:latest
-    container_name: authentik-worker
-    restart: unless-stopped
-    command: worker
-    depends_on:
-      redis:
-        condition: service_healthy
-    environment:
-      AUTHENTIK_SECRET_KEY: {{ authentik_secret_key }}
-      AUTHENTIK_POSTGRESQL__HOST: {{ pg_host }}
-      AUTHENTIK_POSTGRESQL__PORT: "{{ pg_port }}"
-      AUTHENTIK_POSTGRESQL__NAME: {{ pg_db }}
-      AUTHENTIK_POSTGRESQL__USER: {{ pg_user }}
-      AUTHENTIK_POSTGRESQL__PASSWORD: {{ pg_password }}
-      AUTHENTIK_REDIS__HOST: redis
-      AUTHENTIK_REDIS__PORT: "6379"
+      APP_URL: "https://{{ sso_fqdn }}"
+      TRUST_PROXY: "true"
+      ENCRYPTION_KEY: "{{ pocket_id_encryption_key }}"
+      PORT: "443"
+      TLS_CERT_FILE: "/certs/fullchain.pem"
+      TLS_KEY_FILE: "/certs/privkey.pem"
+      PUID: "1000"
+      PGID: "1000"
     volumes:
-      - {{ ak_compose_dir }}/certs:/certs:ro
-
-  redis:
-    image: redis:7-alpine
-    container_name: authentik-redis
-    restart: unless-stopped
-    command: ["redis-server","--save","\"\"","--appendonly","no"]
+      - {{ pocket_id_compose_dir }}/data:/app/data
+      - {{ pocket_id_compose_dir }}/certs:/certs:ro
+    ports:
+      - "443:443"
     healthcheck:
-      interval: 30s
-      retries: 5
-      start_period: 20s
-      test:
-      - CMD-SHELL
-      - redis-cli ping | grep PONG
-      timeout: 3s
+      test: ["CMD", "/app/pocket-id", "healthcheck"]
+      interval: 1m30s
+      timeout: 5s
+      retries: 2
+      start_period: 10s
 
   node_exporter:
     image: quay.io/prometheus/node-exporter:latest

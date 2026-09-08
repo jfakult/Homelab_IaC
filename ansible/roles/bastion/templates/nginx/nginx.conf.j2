@@ -21,10 +21,18 @@ http {
   # Metrics endpoint for Prometheus scraping
   include /etc/nginx/conf.d/metrics.conf;
 
+  # SSO (Pocket ID) configuration
+  include /etc/nginx/conf.d/sso.fakult.net.conf;
+
   server {
     listen 80;
     listen [::]:80;
     server_name {{ domain_name }};
+
+    location ^~ /.well-known/acme-challenge/ {
+        default_type "text/plain";
+        root /usr/share/nginx/letsencrypt;
+    }
 
     # Special exceptions served in plaintext
     location = /nossl {
@@ -32,13 +40,19 @@ http {
       return 200 "This is plain HTTP!\n";
     }
     # Special exceptions served in plaintext
-    location = /neverssl {
+    location /neverssl {
       default_type text/plain;
       return 200 "This is plain HTTP!\n";
     }
-    location = /http {
+    location /http {
       default_type text/plain;
       return 200 "This is plain HTTP!\n";
+    }
+
+    # Explicitely serve tron resources over HTTP and allow indexing
+    location /tron {
+      root /usr/share/nginx/html;
+      autoindex on;
     }
 
     # Everything else → HTTPS
@@ -52,38 +66,42 @@ http {
     listen [::]:443 ssl;
     server_name {{ domain_name }};
 
-    ssl_certificate     /etc/nginx/ssl/{{ domain_name }}.crt;
-    ssl_certificate_key /etc/nginx/ssl/{{ domain_name }}.key;
+    # default: private only
+    allow 192.168.1.0/24;
+    allow 100.64.0.0/10;
+    deny all;
+
+    ssl_certificate     /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ domain_name }}/privkey.pem;
+
 
     include /etc/nginx/conf.d/ssl_params.conf;
 
     # If someone tries to force http endpoint over HTTPS, send them back to HTTP
-    location = /nossl { return 301 http://$host$request_uri; }
-    location = /neverssl { return 301 http://$host$request_uri; }
-    location = /http  { return 301 http://$host$request_uri; }
+    location /nossl { return 301 http://$host$request_uri; }
+    location /neverssl { return 301 http://$host$request_uri; }
+    location /http  { return 301 http://$host$request_uri; }
+    # location /tron { return 301 http://$host$request_uri; }
 
     # Static files
     include /etc/nginx/snippets/static.conf;
 
     # Proxied services
     include /etc/nginx/snippets/dns.conf;
+    include /etc/nginx/snippets/ai.conf;
     include /etc/nginx/snippets/monitoring.conf;
     include /etc/nginx/snippets/jellyfin.conf;
     include /etc/nginx/snippets/kiwix.conf;     # port 3090
     include /etc/nginx/snippets/nodeJS_servers.conf;     # port 3090
 
     location /share {
-		alias /usr/share/nginx/share;   # mounted NAS share
-		autoindex on;
-
-		add_header 'Access-Control-Allow-Origin' '*';
-        	add_header 'Access-Control-Allow-Credentials' 'true';
-        	add_header 'Access-Control-Allow-Methods' 'GET';
-        	add_header 'Access-Control-Allow-Headers' 'DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type';
-	}
+		  alias /usr/share/nginx/html/share;   # mounted NAS share
+		  autoindex on;
+		}
 
     # Catch-all fallback
     location / {
+        allow all;
         root /usr/share/nginx/html;
         try_files $uri $uri/ =404;    # only existing files; otherwise 404
         autoindex off;

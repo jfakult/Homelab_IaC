@@ -136,8 +136,20 @@
     nv_set.rc not in [0,1] or
     (nv_set.rc == 1 and 'already set' not in (nv_set.stdout | lower))
 
+- name: Make NordVPN cooperate with tailscale (subnet)
+  command: nordvpn whitelist add subnet 100.64.0.0/10
+  ignore_errors: true
+
+- name: Make NordVPN cooperate with tailscale (port)
+  command: nordvpn whitelist add port 41641
+  ignore_errors: true
+
 - name: Reconnect Nord (avoid resolv.conf races)
   command: nordvpn connect
+  failed_when: false
+
+- name: Fix tailscale DNS
+  command: sudo tailscale set --accept-dns=false
   failed_when: false
 
 - name: Wait for NordVPN to be connected

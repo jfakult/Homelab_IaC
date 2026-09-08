@@ -45,7 +45,7 @@
 
 - name: Drop Kiwix compose
   template:
-    src: docker-compose.yml.j2
+    src: docker-compose-kiwix.yml.j2
     dest: /opt/kiwix/docker-compose.yml
     mode: "0644"
   tags: kiwix
@@ -63,6 +63,36 @@
     chdir: /opt/kiwix
   tags: kiwix
   when: kiwix_ps.stdout == ""
+
+- name: Ensure journal directory
+  file:
+    path: "/opt/journal"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  tags: journal
+
+- name: Drop journal compose
+  template:
+    src: docker-compose-journal.yml.j2
+    dest: /opt/journal/docker-compose.yml
+    mode: "0644"
+  tags: journal
+  notify: Restart journal docker
+
+- name: Check if journal container is running
+  command: docker ps --filter "name=journal" --filter "status=running" --format "{{'{{.Names}}'}}"
+  register: journal_ps
+  changed_when: false
+  tags: journal
+
+- name: Bring up journal stack
+  shell: docker compose up -d
+  args:
+    chdir: /opt/journal
+  tags: journal
+  when: journal_ps.stdout == ""
 
 - name: Drop webappctl, gen and cleanup scripts
   copy:

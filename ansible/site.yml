@@ -17,18 +17,7 @@
   tags:
     - tested
 
-# Setup critical infrastructure (DB, SSO, Bastion). Order matters
-- name: Configure DB
-  hosts: db
-  become: true
-  become_method: sudo
-  pre_tasks:
-    - import_tasks: roles/misc/tasks/install_docker_and_compose.yml
-  roles:
-    - db
-  tags:
-    - tested
-
+# Setup critical infrastructure (SSO, Bastion). Order matters
 - name: Configure SSO
   hosts: sso
   become: true

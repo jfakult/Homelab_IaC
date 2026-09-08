@@ -1,21 +1,13 @@
 domain_name: "fakult.net"
 
-authentik_domain: "{{ sso_fqdn }}"   # also defined in infra
-
 # Bastion (201)
 tls_mode: "mkcert"      # mkcert | letsencrypt
 tls_cert_path: "/etc/nginx/tls/{{ gateway_domain_root }}.crt"
 tls_key_path:  "/etc/nginx/tls/{{ gateway_domain_root }}.key"
 
-sso_base_url: "https://{{ authentik_domain }}"
-forward_auth_path: "/outpost.goauthentik.io/auth/nginx"
-
 ssl_dir: "/etc/nginx/ssl"
 ssl_cert: "{{ ssl_dir }}/{{ domain_name }}.crt"
 ssl_key: "{{ ssl_dir }}/{{ domain_name }}.key"
-
-sso_cert_path: "{{ ssl_dir }}/{{ authentik_domain }}.crt"
-sso_key_path:  "{{ ssl_dir }}/{{ authentik_domain }}.key"
 
 jellyfin_container: "jellyfin"
 
@@ -24,3 +16,9 @@ whoami_server_name: "whoami.{{ gateway_domain_root }}"
 files_server_name:  "files.{{ gateway_domain_root }}"
 
 webapps_host: "{{ hostvars['apps']['webapps'] | default('192.168.1.205') }}"
+
+certbot_primary_domain: "{{ domain_name }}"
+certbot_domains:
+  - "{{ domain_name }}"
+  - "sso.{{ domain_name }}"
+certbot_email: "jfakult15@gmail.com"

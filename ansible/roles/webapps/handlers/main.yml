@@ -3,3 +3,9 @@
   shell: docker compose up -d --force-recreate
   args: { chdir: /opt/kiwix }
   ignore_errors: true
+
+- name: Restart journal docker
+  # restart journal with the new compose file
+  shell: docker compose up -d --force-recreate
+  args: { chdir: /srv/journal }
+  ignore_errors: true

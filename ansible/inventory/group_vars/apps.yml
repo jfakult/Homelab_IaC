@@ -1,5 +1,5 @@
 
-authentik_base: "https://sso.fakult.net"
+sso_base: "https://sso.fakult.net"
 
 jellyfin_compose_dir: "/opt/jellyfin"
 jellyfin_uid: "1000"
@@ -11,7 +11,7 @@ jellyfin_oidc:
   client_id: "to_fill_after_provider"
   client_secret: "to_fill_after_provider"
   scopes: "openid profile email groups"
-  discovery_url: "{{ authentik_base }}/application/o/jellyfin-oidc/.well-known/openid-configuration"
+  discovery_url: "{{ sso_base }}/.well-known/openid-configuration"
 media_paths:
   root_media: "/srv/media/"
   root_media_array: "/srv/nas/"      # optional, for larger media collections
@@ -25,3 +25,6 @@ media_paths:
 #jellyfin_fonts_dir: "/srv/fonts"
 #jellyfin_extra_hosts:
 #  - "host.docker.internal:host-gateway"
+
+blinko_nextauth_secret: "{{ vault_blinko_nextauth_secret }}"
+blinko_postgres_password: "{{ vault_blinko_postgres_password }}"

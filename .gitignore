@@ -2,6 +2,7 @@ pki-out/
 *.conf.j2
 *.conf.butlah*
 *.env*
+snippets/*.j2
 
 # === Terraform ===
 # Local .terraform directories

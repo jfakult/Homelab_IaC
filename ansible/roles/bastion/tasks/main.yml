@@ -100,3 +100,42 @@
     local_mount_path: /srv/share
     nas_share_path: /mnt/user/Public
     mount_opts: "{{ bastion_mount_opts }}"
+
+
+
+- name: Install certbot and nginx plugin
+  ansible.builtin.apt:
+    name:
+      - certbot
+      - python3-certbot-nginx
+    state: present
+    update_cache: yes
+  become: yes
+  tags: certbot
+
+- name: Ensure ACME webroot exists
+  ansible.builtin.file:
+    path: /var/www/letsencrypt
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: "0755"
+  become: yes
+  tags: certbot
+
+# -d {{ certbot_domains | join(' -d ') }}
+
+- name: Issue/renew certificate for {{ certbot_primary_domain }}
+  ansible.builtin.command: >
+    certbot certonly
+    --webroot
+    --webroot-path /var/www/letsencrypt
+    -d {{ certbot_domains | join(' -d ') }}
+    --agree-tos
+    -m {{ certbot_email }}
+    --non-interactive
+    --keep-until-expiring
+  args:
+    creates: "/etc/letsencrypt/live/{{ certbot_primary_domain }}/fullchain.pem"
+  become: yes
+  tags: certbot

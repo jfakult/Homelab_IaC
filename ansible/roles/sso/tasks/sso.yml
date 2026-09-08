@@ -1,56 +1,15 @@
 - name: Create dirs
   file:
-    path: "/opt/authentik/app"
+    path: "{{ item }}"
     state: directory
     mode: "0750"
+    owner: 1000
+    group: 1000
+  loop:
+    - "{{ pocket_id_compose_dir }}/data"
+    - "{{ pocket_id_compose_dir }}/certs"
 
-- name: Drop compose
-  template:
-    src: docker-compose.yml.j2
-    dest: /opt/authentik/docker-compose.yml
-    mode: "0644"
-
-- name: Install Postgres client tools
-  apt:
-    name: postgresql-client
-    state: present
-    update_cache: yes
-
-- name: Wait for DB reachable from SSO
-  wait_for:
-    host: "{{ hostvars['db'].ansible_host }}"
-    port: 5432
-    timeout: 120
-
-- name: Wait for DB ready (pg_isready)
-  shell: pg_isready -h {{ hostvars['db'].ansible_host }} -p 5432 -U {{ pg_user_authentik }}
-  register: pg_ready
-  until: pg_ready.rc == 0
-  retries: 5
-  delay: 2
-  changed_when: false
-
-- name: Up Authentik
-  shell: docker compose up -d
-  args: { chdir: /opt/authentik }
-
-- name: Wait for Authentik HTTP
-  uri:
-    url: "http://127.0.0.1"
-    status_code: 200
-  register: _ak
-  retries: 5
-  delay: 2
-  until: _ak.status == 200
-
-- name: Ensure discovery dir for {{ sso_fqdn }}
-  file:
-    path: "{{ ak_discovery_dir }}"
-    state: directory
-    mode: "0755"
-  tags: [pki]
-
-- name: Copy cert + key to discovery dir
+- name: Copy cert + key for Pocket ID TLS
   copy:
     src: "{{ item.src }}"
     dest: "{{ item.dest }}"
@@ -59,33 +18,28 @@
     group: 1000
   loop:
     - src: "{{ pki_build_dir }}/fullchain-{{ sso_fqdn }}.pem"
-      dest: "{{ ak_discovery_dir }}/fullchain.pem"
+      dest: "{{ pocket_id_compose_dir }}/certs/fullchain.pem"
       mode: "0644"
     - src: "{{ pki_build_dir }}/{{ sso_fqdn }}.key"
-      dest: "{{ ak_discovery_dir }}/privkey.pem"
+      dest: "{{ pocket_id_compose_dir }}/certs/privkey.pem"
       mode: "0600"
   tags: [pki]
 
-- name: Import SSL cert into Authentik (idempotent; re-imports only on change)
-  shell: |
-    docker exec -i authentik-worker \
-      ak import_certificate \
-        --certificate /certs/{{ sso_fqdn }}/fullchain.pem \
-        --private-key /certs/{{ sso_fqdn }}/privkey.pem \
-        --name {{ sso_fqdn }}
-  register: akimp
-  changed_when: "'Imported' in akimp.stdout or 'updated' in akimp.stdout"
-  failed_when: akimp.rc not in [0]
-  tags: [pki]
+- name: Drop compose
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ pocket_id_compose_dir }}/docker-compose.yml"
+    mode: "0644"
 
-- name: Ensure Authentik admin user + password
-  shell: |
-    # Try to create (works only on fresh DB); on "already exists", reset password.
-    docker exec authentik ak create superuser \
-      --username "{{ authentik_admin_username | default('akadmin') }}" \
-      --email "{{ authentik_bootstrap_email }}" \
-      --password "{{ authentik_bootstrap_password }}" \
-    || printf "%s\n%s\n" "{{ authentik_bootstrap_password }}" "{{ authentik_bootstrap_password }}" \
-       | docker exec -i authentik ak changepassword "{{ authentik_admin_username | default('akadmin') }}"
-  no_log: true
+- name: Up Pocket ID
+  shell: docker compose up -d
+  args: { chdir: "{{ pocket_id_compose_dir }}" }
+
+- name: Wait for Pocket ID healthy
+  shell: >
+    docker inspect -f '{{ '{{' }}.State.Health.Status{{ '}}' }}' pocket-id
+  register: _pid_health
+  until: _pid_health.stdout == "healthy"
+  retries: 10
+  delay: 3
   changed_when: false
