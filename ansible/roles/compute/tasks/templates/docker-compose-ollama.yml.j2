@@ -17,7 +17,7 @@ services:
     ports:
       - "11434:11434"
     volumes:
-      - /home/ubuntu/AI/models:/root/.ollama
+      - /opt/ollama/models:/root/.ollama
     environment:
       # Safety cap: don't let chat + vision + embedding models all pile up
       # resident in VRAM unbounded while sharing the GPU with Whisper.

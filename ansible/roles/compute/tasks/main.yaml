@@ -10,13 +10,10 @@
     path: "{{ item }}"
     state: directory
   loop:
-    - /home/ubuntu/AI
-    - /home/ubuntu/AI/apps
-    - /home/ubuntu/AI/apps/ollama
-    - /home/ubuntu/AI/apps/whisper
-    - /home/ubuntu/AI/data
-    - /home/ubuntu/AI/models
-    - /home/ubuntu/AI/outputs
+    - /opt/ollama
+    - /opt/ollama/models
+    - /opt/whisper
+    - /opt/open-webui
 
 - name: Install ffmpeg (needed for audio handling)
   apt:
@@ -68,14 +65,14 @@
 - name: Drop Ollama compose file
   template:
     src: docker-compose-ollama.yml.j2
-    dest: /home/ubuntu/AI/apps/ollama/docker-compose.yml
+    dest: /opt/ollama/docker-compose.yml
     mode: "0644"
   tags: ollama
 
 - name: Bring up Ollama
   shell: docker compose up -d
   args:
-    chdir: /home/ubuntu/AI/apps/ollama
+    chdir: /opt/ollama
   tags: ollama
 
 - name: Wait for Ollama to be reachable
@@ -102,14 +99,14 @@
 - name: Drop Whisper compose file
   template:
     src: docker-compose-whisper.yml.j2
-    dest: /home/ubuntu/AI/apps/whisper/docker-compose.yml
+    dest: /opt/whisper/docker-compose.yml
     mode: "0644"
   tags: whisper
 
 - name: Bring up Whisper
   shell: docker compose up -d
   args:
-    chdir: /home/ubuntu/AI/apps/whisper
+    chdir: /opt/whisper
   tags: whisper
 
 - name: Wait for Whisper to be healthy
@@ -135,3 +132,27 @@
   debug:
     msg: "{{ _gpu_capacity.stdout_lines }}"
   tags: whisper
+
+# --- Open WebUI (chat UI in front of Ollama, no GPU needed itself) ---
+- name: Drop Open WebUI compose file
+  template:
+    src: docker-compose-open-webui.yml.j2
+    dest: /opt/open-webui/docker-compose.yml
+    mode: "0644"
+  tags: chat
+
+- name: Bring up Open WebUI
+  shell: docker compose up -d
+  args:
+    chdir: /opt/open-webui
+  tags: chat
+
+- name: Wait for Open WebUI to be healthy
+  uri:
+    url: http://localhost:3000/health
+    status_code: 200
+  register: _open_webui_ready
+  retries: 20
+  delay: 5
+  until: _open_webui_ready.status == 200
+  tags: chat

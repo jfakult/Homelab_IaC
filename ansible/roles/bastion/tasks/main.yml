@@ -6,6 +6,7 @@
   loop:
     - /etc/nginx
     - /etc/nginx/conf.d
+    - /etc/nginx/conf.d/subdomains
     - /etc/nginx/snippets
     - /etc/nginx/tls
     - "{{ ssl_dir }}"
@@ -42,8 +43,20 @@
     mode: '0644'
     force: yes
   with_filetree: "templates/nginx/"
-  when: item.state == 'file'
+  when:
+    - item.state == 'file'
+    # These two are rendered separately (render_subdomains.yml) - they need
+    # per-item loop vars (subdomain, cert_exists) that don't exist in this
+    # blanket push's context, so a straight 1:1 copy here would fail on the
+    # undefined vars. Keeping them physically alongside the other conf.d/
+    # and snippets/ files (rather than out of the nginx/ tree entirely) for
+    # discoverability - this exclusion is what makes that safe.
+    - item.path not in ['conf.d/subdomain.conf.j2', 'snippets/subdomain-redirects.conf.j2']
   notify: Reload nginx
+  tags: nginx
+
+- name: Render subdomain vhosts (bootstrap pass - HTTP-only for any subdomain without a cert yet)
+  import_tasks: render_subdomains.yml
   tags: nginx
 
 - name: Drop compose
@@ -139,3 +152,45 @@
     creates: "/etc/letsencrypt/live/{{ certbot_primary_domain }}/fullchain.pem"
   become: yes
   tags: certbot
+
+# Every entry in `subdomains` (group_vars/all/main.yml) gets its own
+# single-domain cert, not folded into the primary domain's SAN cert above -
+# confirmed against the real host that fakult.net and sso.fakult.net are
+# already two independent cert lineages (`certbot certificates`), not one
+# combined cert, so this matches how it actually works rather than how the
+# old (dead) combined-list task implied it worked.
+- name: Issue/renew certificate for each subdomain
+  ansible.builtin.command: >
+    certbot certonly
+    --webroot
+    --webroot-path /var/www/letsencrypt
+    --cert-name {{ item.name }}.{{ domain_name }}
+    -d {{ item.name }}.{{ domain_name }}
+    --agree-tos
+    -m {{ certbot_email }}
+    --non-interactive
+    --keep-until-expiring
+  args:
+    creates: "/etc/letsencrypt/live/{{ item.name }}.{{ domain_name }}/fullchain.pem"
+  loop: "{{ subdomains }}"
+  loop_control:
+    label: "{{ item.name }}.{{ domain_name }}"
+  become: yes
+  tags: certbot
+
+- name: Render subdomain vhosts (activation pass - picks up certs issued just above)
+  import_tasks: render_subdomains.yml
+  tags: [nginx, certbot]
+
+- name: Validate nginx syntax (final, post-cert)
+  shell: docker exec rp-nginx nginx -t
+  register: ngchk_final
+  failed_when: ngchk_final.rc != 0
+  changed_when: false
+  tags: [nginx, certbot]
+
+- name: Reload nginx (final, post-cert)
+  # docker restart, not `nginx -s reload` - see roles/bastion/handlers/main.yml
+  shell: docker restart rp-nginx
+  changed_when: false
+  tags: [nginx, certbot]

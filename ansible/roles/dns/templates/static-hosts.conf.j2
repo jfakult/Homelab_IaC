@@ -2,7 +2,9 @@ address=/fakult.net/192.168.1.201
 address=/bastion.fakult.net/192.168.1.201
 address=/dns.fakult.net/192.168.1.202
 address=/db.fakult.net/192.168.1.203
-address=/sso.fakult.net/192.168.1.201
+{% for sd in subdomains %}
+address=/{{ sd.name }}.{{ gateway_domain_root }}/192.168.1.201
+{% endfor %}
 address=/webapps.fakult.net/192.168.1.205
 address=/media.fakult.net/192.168.1.206
 address=/storage.fakult.net/192.168.1.207

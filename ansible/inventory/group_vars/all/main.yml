@@ -11,6 +11,27 @@ pocket_id_compose_dir: "/opt/pocket-id"
 
 nas_ip: "192.168.1.199"
 
+# --- Public subdomains (chat.fakult.net, sso.fakult.net, ...) -------------
+# Single source of truth for every "<name>.fakult.net -> some backend"
+# service. Adding an entry here is the ONLY step that should ever be needed
+# to stand up a new one - it drives all three consumers:
+#   - roles/dns/templates/static-hosts.conf.j2   (internal LAN resolution)
+#   - roles/bastion/tasks/render_subdomains.yml  (nginx vhost + TLS)
+#   - roles/bastion/tasks/main.yml's certbot loop (Let's Encrypt cert)
+# See docs/subdomains.md for the full add-a-subdomain walkthrough,
+# including the one manual step (public DNS at your registrar) this can't
+# do for you.
+# Defined in all/main.yml (not external.yml) because both "dns" ([infra]
+# group) and "bastion" ([external] group) need to see it, and group_vars
+# files don't cross inventory groups.
+subdomains:
+  - name: sso
+    upstream_host: "{{ hostvars['sso'].ansible_host }}"
+    upstream_port: 1411
+  - name: chat
+    upstream_host: "{{ hostvars['compute'].ansible_host }}"
+    upstream_port: 3000
+
 media_mount_opts:   "rw,hard,nconnect=8,vers=4.2,noatime,rsize=1048576,wsize=1048576,noauto,x-systemd.automount,_netdev,nofail,mount-timeout=10s,x-systemd.idle-timeout=20"
 webapps_mount_opts: "rw,hard,nconnect=8,vers=4.2,noatime,rsize=1048576,wsize=1048576,noauto,x-systemd.automount,_netdev,nofail"
 bastion_mount_opts: "ro,hard,nconnect=8,vers=4.2,noatime,rsize=1048576,wsize=1048576,noauto,x-systemd.automount,_netdev,nofail"

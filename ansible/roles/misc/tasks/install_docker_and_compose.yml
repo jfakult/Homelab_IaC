@@ -1,3 +1,23 @@
+- name: Remove conflicting Ubuntu-native Docker packages
+  # docker-compose-plugin (Docker's official repo) and docker-compose-v2
+  # (Ubuntu's own package) both ship /usr/libexec/docker/cli-plugins/docker-compose
+  # with no Conflicts/Replaces between them, so installing docker-ce
+  # alongside a pre-existing Ubuntu-packaged Docker fails dpkg with an
+  # "overwrite" error. Purge the Ubuntu-native set first (per Docker's own
+  # "uninstall old versions" guidance) - safe no-op on hosts that never had
+  # them (a fresh VM), which is every host except "compute" as of this
+  # writing.
+  apt:
+    name:
+      - docker.io
+      - docker-doc
+      - docker-compose
+      - docker-compose-v2
+      - podman-docker
+      - containerd
+      - runc
+    state: absent
+
 - name: Docker Install prerequisites
   package:
     name: [ "ca-certificates", "curl", "gnupg", "lsb-release" ]

@@ -105,6 +105,8 @@ Run:
 ```
 IaC/
 ├── ansible
+│   ├── docs
+│   │   └── subdomains.md   # how to add a new <name>.fakult.net service
 │   ├── inventory
 │   │   └── hosts.ini
 │   ├── roles

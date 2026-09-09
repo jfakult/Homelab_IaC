@@ -18,7 +18,12 @@
 - name: Ensure blinko role exists
   community.postgresql.postgresql_user:
     name: blinko
-    password: "{{ blinko_postgres_password }}"
+    # blinko_postgres_password (group_vars/apps.yml) isn't visible here -
+    # "db" is in the [infra] inventory group, not [apps]. Reference the
+    # vault var directly instead (group_vars/all/vault.yml applies to every
+    # host); this must resolve to the same value webapps' journal.env.j2
+    # uses for DATABASE_URL, or the app can't authenticate.
+    password: "{{ vault_blinko_postgres_password }}"
     login_host: 127.0.0.1
     login_user: "{{ pg_user_authentik }}"
     login_password: "{{ pg_password_authentik }}"
@@ -43,9 +48,12 @@
   register: _pg_hba_blinko
 
 - name: Reload Postgres config (picks up the new pg_hba.conf line, no restart)
-  shell: docker exec pg-main psql -U {{ pg_user_authentik }} -d {{ pg_db_authentik }} -c "SELECT pg_reload_conf();"
-  environment:
-    PGPASSWORD: "{{ pg_password_authentik }}"
+  # PGPASSWORD must be forwarded into the container via `docker exec -e`,
+  # not just set on the ansible/host-side shell process's own environment -
+  # `docker exec` doesn't inherit the caller's env into the container.
+  shell: >
+    docker exec -e PGPASSWORD={{ pg_password_authentik }} pg-main
+    psql -U {{ pg_user_authentik }} -d {{ pg_db_authentik }} -c "SELECT pg_reload_conf();"
   when: _pg_hba_blinko is changed
 
 - name: Allow Postgres from the webapps VM (UFW)

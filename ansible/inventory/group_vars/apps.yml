@@ -43,3 +43,11 @@ ollama_vision_model: "llava"
 # same-host co-location the repo originally assumed doesn't apply here).
 whisper_base_url: "http://192.168.1.208:8000/v1"
 whisper_model: "Systran/faster-whisper-medium"
+
+# Open WebUI (chat UI, fakult.net/chat) - SSO'd via Pocket-ID. client_id
+# isn't secret but the secret half is vaulted. See the compute role's
+# setup instructions for creating the Pocket-ID OAuth client by hand -
+# this can't be provisioned by Ansible, Pocket-ID has no admin API/CLI
+# for it as of this writing.
+open_webui_oidc_client_id: "{{ vault_open_webui_oidc_client_id }}"
+open_webui_oidc_client_secret: "{{ vault_open_webui_oidc_client_secret }}"

@@ -1,0 +1,42 @@
+# Renders one nginx vhost per entry in `subdomains` (group_vars/all/main.yml)
+# plus the fakult.net/<name> -> https://<name>.fakult.net redirect snippet.
+# Imported twice from main.yml: once before certbot runs (so the HTTP-only
+# block exists for the ACME webroot challenge to hit) and once after (so a
+# newly-issued cert's HTTPS block gets activated in the same play run,
+# instead of needing a second manual invocation). Safe/idempotent either way
+# - a subdomain whose cert already existed just re-renders identically.
+
+- name: Check which subdomain certs already exist
+  stat:
+    path: "/etc/letsencrypt/live/{{ item.name }}.{{ domain_name }}/fullchain.pem"
+  register: _subdomain_cert_stats
+  loop: "{{ subdomains }}"
+  loop_control:
+    label: "{{ item.name }}"
+  tags: nginx
+
+- name: Push subdomain nginx vhosts
+  template:
+    src: nginx/conf.d/subdomain.conf.j2
+    dest: "/etc/nginx/conf.d/subdomains/{{ item.item.name }}.{{ domain_name }}.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ _subdomain_cert_stats.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  vars:
+    subdomain: "{{ item.item }}"
+    cert_exists: "{{ item.stat.exists }}"
+  notify: Reload nginx
+  tags: nginx
+
+- name: Push fakult.net/<name> -> subdomain redirects
+  template:
+    src: nginx/snippets/subdomain-redirects.conf.j2
+    dest: /etc/nginx/snippets/subdomain-redirects.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload nginx
+  tags: nginx

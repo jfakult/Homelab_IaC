@@ -1,6 +1,9 @@
 # roles/bastion/handlers/main.yml
 - name: Reload nginx
-  shell: docker exec rp-nginx nginx -s reload
+  # `nginx -s reload` (SIGHUP) doesn't reliably pick up conf.d/snippets
+  # changes in this container - full restart instead. Brief (~1-2s) full
+  # outage for everything behind bastion, not just whatever changed.
+  shell: docker restart rp-nginx
   ignore_errors: true
 
 - name: Reload nginx docker
