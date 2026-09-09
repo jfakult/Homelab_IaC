@@ -92,6 +92,7 @@ http {
     include /etc/nginx/snippets/monitoring.conf;
     include /etc/nginx/snippets/jellyfin.conf;
     include /etc/nginx/snippets/kiwix.conf;     # port 3090
+    include /etc/nginx/snippets/journal.conf;     # port 1111 (blinko)
     include /etc/nginx/snippets/nodeJS_servers.conf;     # port 3090
 
     location /share {

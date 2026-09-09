@@ -1,29 +1,10 @@
 - name: Create dirs
   file:
-    path: "{{ item }}"
+    path: "{{ pocket_id_compose_dir }}/data"
     state: directory
     mode: "0750"
     owner: 1000
     group: 1000
-  loop:
-    - "{{ pocket_id_compose_dir }}/data"
-    - "{{ pocket_id_compose_dir }}/certs"
-
-- name: Copy cert + key for Pocket ID TLS
-  copy:
-    src: "{{ item.src }}"
-    dest: "{{ item.dest }}"
-    mode: "{{ item.mode }}"
-    owner: 1000
-    group: 1000
-  loop:
-    - src: "{{ pki_build_dir }}/fullchain-{{ sso_fqdn }}.pem"
-      dest: "{{ pocket_id_compose_dir }}/certs/fullchain.pem"
-      mode: "0644"
-    - src: "{{ pki_build_dir }}/{{ sso_fqdn }}.key"
-      dest: "{{ pocket_id_compose_dir }}/certs/privkey.pem"
-      mode: "0600"
-  tags: [pki]
 
 - name: Drop compose
   template:

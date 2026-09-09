@@ -1,6 +1,15 @@
 # sso (204):
 pocket_id_encryption_key: "{{ vault_pocket_id_encryption_key }}"
 
+# db (203): pg-main's bootstrap superuser - re-added (was removed in the
+# Authentik->Pocket-ID migration since the old "db" play was unplugged) only
+# for roles/db/tasks/provision_blinko.yml, which authenticates against the
+# already-running pg-main container to add a "blinko" role+database. Does
+# NOT re-enable the full db role/play.
+pg_user_authentik: "authentik"
+pg_db_authentik: "authentik"
+pg_password_authentik: "{{ vault_pg_password_authentik }}"
+
 # Bastion (201)
 tls_mode: "mkcert"      # mkcert | letsencrypt
 tls_cert_path: "/etc/nginx/tls/{{ gateway_domain_root }}.crt"

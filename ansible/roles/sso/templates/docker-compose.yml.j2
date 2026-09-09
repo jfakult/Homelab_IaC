@@ -7,16 +7,13 @@ services:
       APP_URL: "https://{{ sso_fqdn }}"
       TRUST_PROXY: "true"
       ENCRYPTION_KEY: "{{ pocket_id_encryption_key }}"
-      PORT: "443"
-      TLS_CERT_FILE: "/certs/fullchain.pem"
-      TLS_KEY_FILE: "/certs/privkey.pem"
+      PORT: "1411"
       PUID: "1000"
       PGID: "1000"
     volumes:
       - {{ pocket_id_compose_dir }}/data:/app/data
-      - {{ pocket_id_compose_dir }}/certs:/certs:ro
     ports:
-      - "443:443"
+      - "1411:1411"
     healthcheck:
       test: ["CMD", "/app/pocket-id", "healthcheck"]
       interval: 1m30s

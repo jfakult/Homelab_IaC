@@ -43,7 +43,7 @@
     force: yes
   with_filetree: "templates/nginx/"
   when: item.state == 'file'
-  notify: Reload nginx docker
+  notify: Reload nginx
   tags: nginx
 
 - name: Drop compose

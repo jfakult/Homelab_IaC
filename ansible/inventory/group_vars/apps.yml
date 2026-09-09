@@ -28,3 +28,18 @@ media_paths:
 
 blinko_nextauth_secret: "{{ vault_blinko_nextauth_secret }}"
 blinko_postgres_password: "{{ vault_blinko_postgres_password }}"
+
+# --- AI infra (Ollama + Whisper on the "compute" VM, 192.168.1.208 - the
+# only host with GPU passthrough) - shared between the compute role (which
+# installs/pulls these) and the webapps role (which points blinko-journal at
+# them). Single source of truth: change a model here, re-run both plays. ---
+ollama_base_url: "http://192.168.1.208:11434"
+ollama_chat_model: "llama3.1"
+ollama_embedding_model: "nomic-embed-text"
+ollama_vision_model: "llava"
+
+# Whisper reached over the LAN (not Docker DNS - see
+# docs/workstreams/02-whisper-service.md in blinko-journal for why the
+# same-host co-location the repo originally assumed doesn't apply here).
+whisper_base_url: "http://192.168.1.208:8000/v1"
+whisper_model: "Systran/faster-whisper-medium"
