@@ -1,0 +1,41 @@
+# Ollama (chat/auto-tagging, embeddings/RAG, vision) for blinko-journal and
+# any other LAN consumer. Runs on the "compute" VM specifically because it's
+# the only VM with GPU passthrough (RTX 4060 Ti 16GB) - see
+# docs/workstreams/04-ai-pipeline.md and docs/workstreams/02-whisper-service.md
+# in the blinko-journal repo for why this host shares its GPU with the
+# Whisper (speaches) container deployed alongside it.
+#
+# Reached over the LAN by other hosts at http://192.168.1.208:11434 - not
+# Docker-DNS/container-to-container, since consumers (e.g. blinko-website on
+# the "webapps" VM) run on a different host entirely.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - /home/ubuntu/AI/models:/root/.ollama
+    environment:
+      # Safety cap: don't let chat + vision + embedding models all pile up
+      # resident in VRAM unbounded while sharing the GPU with Whisper.
+      OLLAMA_MAX_LOADED_MODELS: "2"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

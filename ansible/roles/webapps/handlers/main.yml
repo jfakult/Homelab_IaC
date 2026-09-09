@@ -6,6 +6,9 @@
 
 - name: Restart journal docker
   # restart journal with the new compose file
-  shell: docker compose up -d --force-recreate
-  args: { chdir: /srv/journal }
+  # NOTE: was pointed at /srv/journal (nonexistent - compose actually lives
+  # in /opt/journal), silently no-op'd via ignore_errors. Fixed as part of
+  # the AI-infra deploy.
+  shell: docker compose -f docker-compose.yml -f docker-compose-network.yml up -d --force-recreate
+  args: { chdir: /opt/journal }
   ignore_errors: true

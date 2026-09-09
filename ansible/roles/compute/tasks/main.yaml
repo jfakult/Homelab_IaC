@@ -1,4 +1,10 @@
-# In /home/ubuntu, create AI dir and inside: apps, data, models, outputs
+# "compute" (192.168.1.208) is the only VM with GPU passthrough (RTX 4060 Ti
+# 16GB, hostpci0 in /etc/pve/qemu-server/208.conf) - it hosts Ollama (chat/
+# auto-tagging/embeddings/vision) and Whisper (speaches, voice transcription)
+# for blinko-journal, both reached over the LAN by the "webapps" VM since
+# blinko-website itself has no GPU and can't be co-located with Whisper the
+# way blinko-journal's docs originally assumed.
+
 - name: Create AI directory structure
   file:
     path: "{{ item }}"
@@ -6,19 +12,126 @@
   loop:
     - /home/ubuntu/AI
     - /home/ubuntu/AI/apps
+    - /home/ubuntu/AI/apps/ollama
+    - /home/ubuntu/AI/apps/whisper
     - /home/ubuntu/AI/data
     - /home/ubuntu/AI/models
     - /home/ubuntu/AI/outputs
-    - /home/ubuntu/AI/apps/Fooocus
-    #- /home/ubuntu/AI/apps/whisper
 
-# Install python3 and pip
-- name: Install python3 and pip
+- name: Install ffmpeg (needed for audio handling)
   apt:
     name:
       - python3
       - python3-pip
-      #- python3-whisper
       - ffmpeg
     state: present
     update_cache: yes
+
+# --- NVIDIA Container Toolkit (idempotent - already present on this host as
+# of this writing, but the role should be able to provision a fresh compute
+# VM from scratch too) ---
+- name: Check if nvidia-container-toolkit is already installed
+  command: dpkg-query -W -f='${Status}' nvidia-container-toolkit
+  register: nvidia_ctk_check
+  failed_when: false
+  changed_when: false
+
+- name: Add NVIDIA Container Toolkit apt repo list
+  get_url:
+    url: https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list
+    dest: /etc/apt/sources.list.d/nvidia-container-toolkit.list
+  when: "'install ok installed' not in nvidia_ctk_check.stdout"
+
+- name: Add NVIDIA Container Toolkit apt key
+  apt_key:
+    url: https://nvidia.github.io/libnvidia-container/gpgkey
+    state: present
+  when: "'install ok installed' not in nvidia_ctk_check.stdout"
+
+- name: Install nvidia-container-toolkit
+  apt:
+    name: nvidia-container-toolkit
+    state: present
+    update_cache: true
+  when: "'install ok installed' not in nvidia_ctk_check.stdout"
+
+- name: Configure Docker to use the NVIDIA runtime
+  command: nvidia-ctk runtime configure --runtime=docker
+  register: nvidia_ctk_configure
+  changed_when: "'Wrote' in nvidia_ctk_configure.stdout"
+  notify: Restart docker
+
+- name: Flush handlers so docker is ready before compose up
+  meta: flush_handlers
+
+# --- Ollama ---
+- name: Drop Ollama compose file
+  template:
+    src: docker-compose-ollama.yml.j2
+    dest: /home/ubuntu/AI/apps/ollama/docker-compose.yml
+    mode: "0644"
+  tags: ollama
+
+- name: Bring up Ollama
+  shell: docker compose up -d
+  args:
+    chdir: /home/ubuntu/AI/apps/ollama
+  tags: ollama
+
+- name: Wait for Ollama to be reachable
+  uri:
+    url: http://localhost:11434/api/tags
+    status_code: 200
+  register: _ollama_ready
+  retries: 10
+  delay: 3
+  until: _ollama_ready.status == 200
+  tags: ollama
+
+- name: Pull Ollama models
+  command: docker exec ollama ollama pull {{ item }}
+  loop:
+    - "{{ ollama_chat_model }}"
+    - "{{ ollama_embedding_model }}"
+    - "{{ ollama_vision_model }}"
+  register: _ollama_pull
+  changed_when: "'success' in _ollama_pull.stdout or 'up to date' in _ollama_pull.stdout" # noqa
+  tags: ollama
+
+# --- Whisper (speaches) ---
+- name: Drop Whisper compose file
+  template:
+    src: docker-compose-whisper.yml.j2
+    dest: /home/ubuntu/AI/apps/whisper/docker-compose.yml
+    mode: "0644"
+  tags: whisper
+
+- name: Bring up Whisper
+  shell: docker compose up -d
+  args:
+    chdir: /home/ubuntu/AI/apps/whisper
+  tags: whisper
+
+- name: Wait for Whisper to be healthy
+  uri:
+    url: http://localhost:8000/health
+    status_code: 200
+  register: _whisper_ready
+  retries: 20
+  delay: 5
+  until: _whisper_ready.status == 200
+  tags: whisper
+
+# --- GPU capacity sanity check (informational, not a hard gate - see
+# docs/workstreams/02-whisper-service.md in blinko-journal for what to
+# actually watch under real concurrent load) ---
+- name: Capture nvidia-smi with both Ollama and Whisper up
+  command: nvidia-smi --query-gpu=memory.used,memory.total --format=csv
+  register: _gpu_capacity
+  changed_when: false
+  tags: whisper
+
+- name: Show GPU memory usage
+  debug:
+    msg: "{{ _gpu_capacity.stdout_lines }}"
+  tags: whisper

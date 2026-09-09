@@ -57,23 +57,3 @@
     port: 8096
     delay: 1
     timeout: 60
-
-- name: Install public cert to host trust
-  copy:
-    src: "{{ pki_build_dir }}/{{ sso_fqdn }}.crt"
-    dest: /usr/local/share/ca-certificates/{{ sso_fqdn }}.crt
-    mode: "0644"
-  tags: [pki]
-
-- name: Update host CA store
-  #shell: update-ca-certificates
-  shell: docker exec -u 0 -it jellyfin bash -lc 'update-ca-certificates'  # Run as root
-  register: ca_update
-  changed_when: "'1 added' in ca_update.stdout or 'done' in ca_update.stdout"
-  tags: [pki]
-
-- name: Install cert into Jellyfin container trust
-  shell: |
-    docker cp /usr/local/share/ca-certificates/{{ sso_fqdn }}.crt jellyfin:/usr/local/share/ca-certificates/{{ sso_fqdn }}.crt
-    docker exec jellyfin sh -lc 'update-ca-certificates || update-ca-trust extract || true'
-  tags: [pki]

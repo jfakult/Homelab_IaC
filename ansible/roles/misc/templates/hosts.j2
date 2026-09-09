@@ -7,6 +7,11 @@
 {% endfor %}
 
 # Managed by Ansible
-{% for host, vars in hostvars.items() %}
+# sso.fakult.net is intentionally excluded here: it must resolve via real DNS
+# to bastion (nginx), which holds the trusted Let's Encrypt cert and proxies
+# to pocket-id. A direct /etc/hosts entry bypasses nginx and exposes
+# pocket-id's self-signed cert to OIDC clients. The bare `sso` short name
+# above is unaffected and still resolves straight to the sso host.
+{% for host, vars in hostvars.items() if host != 'sso' %}
 {{ vars.ansible_host | default('') }} {{ host }}.fakult.net
 {% endfor %}

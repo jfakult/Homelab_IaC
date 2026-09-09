@@ -1,0 +1,56 @@
+# Provisions a role+database for blinko-journal inside the existing pg-main
+# container on this host (currently Authentik-only). Deliberately NOT part
+# of roles/db/tasks/main.yml (that whole role is unplugged from site.yml
+# since the Authentik->Pocket-ID migration - re-running it would need vars
+# that no longer exist and would re-template/restart pg-main unnecessarily).
+# This task file only adds a new role/db + one pg_hba.conf line + one UFW
+# rule, and reloads Postgres config in place (no container restart, no
+# disruption to the running Authentik connections).
+
+- name: Install DB client + driver (idempotent, likely already present)
+  apt:
+    name:
+      - postgresql-client
+      - python3-psycopg2
+    state: present
+    update_cache: true
+
+- name: Ensure blinko role exists
+  community.postgresql.postgresql_user:
+    name: blinko
+    password: "{{ blinko_postgres_password }}"
+    login_host: 127.0.0.1
+    login_user: "{{ pg_user_authentik }}"
+    login_password: "{{ pg_password_authentik }}"
+    port: 5432
+    state: present
+
+- name: Ensure blinko database exists
+  community.postgresql.postgresql_db:
+    name: blinko
+    owner: blinko
+    login_host: 127.0.0.1
+    login_user: "{{ pg_user_authentik }}"
+    login_password: "{{ pg_password_authentik }}"
+    port: 5432
+    state: present
+
+- name: Allow blinko role to connect from the webapps VM
+  lineinfile:
+    path: /opt/postgres/conf/pg_hba.conf
+    insertbefore: '^# local$'
+    line: "host    blinko   blinko   192.168.1.205/32   md5"
+  register: _pg_hba_blinko
+
+- name: Reload Postgres config (picks up the new pg_hba.conf line, no restart)
+  shell: docker exec pg-main psql -U {{ pg_user_authentik }} -d {{ pg_db_authentik }} -c "SELECT pg_reload_conf();"
+  environment:
+    PGPASSWORD: "{{ pg_password_authentik }}"
+  when: _pg_hba_blinko is changed
+
+- name: Allow Postgres from the webapps VM (UFW)
+  ufw:
+    rule: allow
+    port: "5432"
+    proto: tcp
+    src: "192.168.1.205"

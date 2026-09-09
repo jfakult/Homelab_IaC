@@ -1,0 +1,53 @@
+# Self-hosted, OpenAI-API-compatible speech-to-text service for
+# blinko-journal (Systran/speaches, https://github.com/speaches-ai/speaches).
+# Adapted from blinko-journal's own docker-compose.whisper.yml.
+#
+# Deployed STANDALONE here (no docker-compose.network.yml overlay, no
+# "blinko-internal" Docker-DNS network) because it runs on the "compute" VM
+# (the only host with GPU passthrough) while blinko-website runs on a
+# different VM ("webapps") entirely - the repo's docs assumed same-host
+# co-location, which isn't possible on this real topology. blinko-website
+# reaches this over the LAN at http://192.168.1.208:8000/v1 instead of a
+# Docker DNS name - the published "ports: 8000:8000" below is load-bearing,
+# not just for local debugging.
+
+services:
+  whisper:
+    image: ghcr.io/speaches-ai/speaches:latest-cuda-12.6.3
+    container_name: whisper
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - whisper-model-cache:/home/ubuntu/.cache/huggingface/hub
+    environment:
+      PRELOAD_MODELS: '["{{ whisper_model }}"]'
+      WHISPER__INFERENCE_DEVICE: cuda
+      WHISPER__COMPUTE_TYPE: float16
+      UVICORN_HOST: 0.0.0.0
+      UVICORN_PORT: 8000
+      ENABLE_UI: "false"
+      # Unload after 5 min idle so it isn't permanently resident alongside
+      # Ollama - fits this journal's bursty usage pattern (see
+      # docs/workstreams/02-whisper-service.md in blinko-journal).
+      STT_MODEL_TTL: "300"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  whisper-model-cache:

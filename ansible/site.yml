@@ -61,6 +61,15 @@
     - media
   tags: tested
 
+- name: Provision blinko-journal database
+  hosts: db
+  become: true
+  become_method: sudo
+  tasks:
+    - import_tasks: roles/db/tasks/provision_blinko.yml
+  tags:
+    - journal
+
 - name: Configure Webapps Server
   hosts: webapps
   become: true

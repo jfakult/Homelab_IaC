@@ -1,0 +1,40 @@
+# Ansible-managed copy of blinko-journal's own docker-compose.prod.yml
+# (image-pull based - webapps never git-clones the app repo; GitHub Actions
+# builds ghcr.io/jfakult/blinko-journal, this VM just pulls it). Kept as a
+# static copy here rather than a live checkout so Ansible is the single
+# source of truth for what's deployed. Postgres is external (the "db" VM's
+# shared instance - see roles/db/tasks/provision_blinko.yml), so no local
+# postgres service.
+
+services:
+  blinko-website:
+    image: ghcr.io/jfakult/blinko-journal:latest
+    container_name: blinko-website
+    environment:
+      NODE_ENV: production
+      NEXTAUTH_URL: https://fakult.net/journal
+      NEXT_PUBLIC_BASE_URL: https://fakult.net/journal
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      DATABASE_URL: ${DATABASE_URL}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL}
+      OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL}
+      WHISPER_BASE_URL: ${WHISPER_BASE_URL:-}
+      WHISPER_MODEL: ${WHISPER_MODEL}
+    volumes:
+      - /home/{{ ansible_user }}/blinko-journal/.blinko:/app/.blinko
+    restart: always
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    ports:
+      - 1111:1111
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://blinko-website:1111/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    # networks: attached by docker-compose-journal-network.yml (blinko-egress)

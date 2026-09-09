@@ -1,0 +1,16 @@
+# Simplified from blinko-journal's own docker-compose.network.yml. That
+# file's "blinko-internal" zero-egress network assumed whisper + postgres
+# run alongside blinko-website in the same compose project/host. On this
+# real topology neither does: Whisper needs the GPU and lives on the
+# "compute" VM (192.168.1.208); Postgres is the shared instance on the "db"
+# VM (192.168.1.203). So blinko-internal would have nothing to attach to it.
+# blinko-website just needs one egress network, restricted to LAN/Tailscale
+# by the host firewall - see roles/webapps/tasks/firewall.yml.
+networks:
+  blinko-egress:
+    driver: bridge
+
+services:
+  blinko-website:
+    networks:
+      - blinko-egress

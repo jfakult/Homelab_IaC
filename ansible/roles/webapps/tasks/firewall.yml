@@ -1,0 +1,62 @@
+# Restrict blinko-website's egress network (blinko-egress) to private
+# ranges only (LAN + Tailscale) - blocks the open internet while still
+# allowing every real destination it needs (Ollama/Whisper on the "compute"
+# VM, Postgres on the "db" VM, Pocket-ID/reverse-proxy on "bastion", all
+# 192.168.1.0/24; this session itself over Tailscale, 100.64.0.0/10 - same
+# ranges already allowlisted in roles/bastion/templates/nginx/nginx.conf.j2).
+# Run after the compose stack is up so the blinko-egress network exists.
+
+- name: Install iptables-persistent (non-interactively)
+  apt:
+    name: iptables-persistent
+    state: present
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Inspect blinko-egress network subnet
+  command: >
+    docker network inspect blinko-egress
+    -f '{{ "{{" }} (index .IPAM.Config 0).Subnet {{ "}}" }}'
+  register: _blinko_egress_subnet
+  changed_when: false
+
+- name: Allow blinko-egress -> LAN
+  command: >
+    iptables -C DOCKER-USER -s {{ _blinko_egress_subnet.stdout }} -d 192.168.1.0/24 -j ACCEPT
+  register: _rule_lan
+  failed_when: false
+  changed_when: false
+
+- name: Insert blinko-egress -> LAN rule
+  command: >
+    iptables -I DOCKER-USER -s {{ _blinko_egress_subnet.stdout }} -d 192.168.1.0/24 -j ACCEPT
+  when: _rule_lan.rc != 0
+
+- name: Allow blinko-egress -> Tailscale
+  command: >
+    iptables -C DOCKER-USER -s {{ _blinko_egress_subnet.stdout }} -d 100.64.0.0/10 -j ACCEPT
+  register: _rule_ts
+  failed_when: false
+  changed_when: false
+
+- name: Insert blinko-egress -> Tailscale rule
+  command: >
+    iptables -I DOCKER-USER -s {{ _blinko_egress_subnet.stdout }} -d 100.64.0.0/10 -j ACCEPT
+  when: _rule_ts.rc != 0
+
+- name: Drop everything else from blinko-egress
+  command: >
+    iptables -C DOCKER-USER -s {{ _blinko_egress_subnet.stdout }} -j DROP
+  register: _rule_drop
+  failed_when: false
+  changed_when: false
+
+- name: Insert blinko-egress DROP-all rule (must stay last)
+  command: >
+    iptables -A DOCKER-USER -s {{ _blinko_egress_subnet.stdout }} -j DROP
+  when: _rule_drop.rc != 0
+
+- name: Persist iptables rules
+  community.general.iptables_state:
+    state: saved
+    path: /etc/iptables/rules.v4
