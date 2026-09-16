@@ -232,6 +232,47 @@
     state: started
   tags: [ollama, whisper]
 
+# --- Active GPU health watchdog ---
+# Covers the failure class gpu-containers-recreate.service can't see: GPU
+# access lost WITHOUT docker/containerd restarting (its only trigger), and
+# Ollama's own healthcheck never touches CUDA so nothing else would notice
+# either - see gpu-health-check.sh.j2 for the full incident this closes
+# (2026-09-16: a missing NVIDIA CDI spec let ollama silently run on CPU for
+# an unknown period, degrading multi-turn chat with no visible failure).
+# Polls for the exact failure signature seen live, self-heals via the
+# existing recreate unit, escalates to a VM reboot only after repeated
+# failed heal attempts.
+- name: Drop GPU health-check script
+  template:
+    src: gpu-health-check.sh.j2
+    dest: /usr/local/bin/gpu-health-check.sh
+    mode: "0755"
+  tags: [ollama, whisper]
+
+- name: Drop GPU health-check systemd unit + timer
+  template:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item | basename | regex_replace('\\.j2$', '') }}"
+    mode: "0644"
+  loop:
+    - gpu-health-check.service.j2
+    - gpu-health-check.timer.j2
+  register: _gpu_health_check_units
+  tags: [ollama, whisper]
+
+- name: Reload systemd units (health-check)
+  systemd:
+    daemon_reload: true
+  when: _gpu_health_check_units is changed
+  tags: [ollama, whisper]
+
+- name: Enable + start GPU health-check timer
+  systemd:
+    name: gpu-health-check.timer
+    enabled: true
+    state: started
+  tags: [ollama, whisper]
+
 # --- GPU capacity sanity check (informational, not a hard gate - see
 # docs/workstreams/02-whisper-service.md in blinko-journal for what to
 # actually watch under real concurrent load) ---

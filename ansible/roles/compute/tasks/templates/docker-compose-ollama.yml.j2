@@ -31,7 +31,20 @@ services:
       # content came back completely empty. Raising this grows the KV-cache
       # VRAM reserved per loaded model (watch nvidia-smi with both slots
       # from OLLAMA_MAX_LOADED_MODELS above filled + Whisper running).
-      OLLAMA_CONTEXT_LENGTH: "8192"
+      #
+      # 8192 -> 16384 (2026-09-16): same class of bug reproduced on
+      # gemma4:e4b (the now-pinned chat model, see ollama_chat_model_base
+      # in apps.yml) on multi-turn follow-ups - growing conversation
+      # history plus its own thinking traces were hitting the 8192 ceiling
+      # mid-thought, same empty-content symptom as the qwen3.5 incident
+      # above. Sized off documented VRAM math, not a live nvidia-smi
+      # reading (no SSH access to compute from the session that made this
+      # change) - 16GB card, gemma4:e4b (9.6GB) + Whisper (~2GB) = ~11.6GB
+      # baseline, leaving ~4.4GB headroom which the user confirmed is
+      # roughly their typical overhead. Re-check nvidia-smi after deploy,
+      # especially if OLLAMA_MAX_LOADED_MODELS' other two slots (embedding/
+      # vision) end up resident at the same time as chat.
+      OLLAMA_CONTEXT_LENGTH: "16384"
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 30s

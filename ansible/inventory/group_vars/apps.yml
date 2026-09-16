@@ -34,6 +34,16 @@ blinko_postgres_password: "{{ vault_blinko_postgres_password }}"
 # installs/pulls these) and the webapps role (which points blinko-journal at
 # them). Single source of truth: change a model here, re-run both plays. ---
 ollama_base_url: "http://192.168.1.208:11434"
+# --- GPU health watchdog (roles/compute's gpu-health-check.sh/.service/
+# .timer - see that script's own comment for the incident it closes) ---
+# Every 5 min: frequent enough that a lost-GPU period stays short, cheap
+# enough (log grep, no inference call) that it costs nothing at idle.
+gpu_health_check_interval_minutes: 5
+# 3 consecutive failed recreate attempts (~15 min at the interval above)
+# before escalating to a full VM reboot - long enough that a single
+# transient blip doesn't trigger a reboot, short enough that a genuinely
+# wedged GPU doesn't sit broken for hours like the 2026-09-16 incident did.
+gpu_health_check_max_fails: 3
 # Raw upstream tag - pulled from Ollama's library, used only as the FROM
 # base for the capped variant below (see roles/compute's Modelfile task).
 # Not consumed directly by any app/UI - see ollama_chat_model.

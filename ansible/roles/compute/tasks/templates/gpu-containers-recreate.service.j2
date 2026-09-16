@@ -23,6 +23,25 @@
 # needrestart override task in main.yaml for the other half of this fix).
 # PartOf=docker.service alone missed this entirely since docker.service's
 # own uptime never changed.
+#
+# ExecStartPre (2026-09-16): a full recreate alone turned out NOT to be
+# sufficient - confirmed live that /etc/cdi/nvidia.yaml had never existed on
+# this host. Modern nvidia-container-toolkit (config.toml has
+# nvidia-container-runtime.mode = "auto") resolves compose's
+# `deploy.resources.reservations.devices driver: nvidia` GPU request via CDI
+# FIRST, and when the CDI spec is missing, dockerd only logs a warning
+# ("CDI device injection failed: unresolvable CDI devices nvidia.com/gpu=0")
+# and starts the container anyway WITHOUT real GPU device access - no error,
+# no unhealthy status, `ollama` just silently falls back to CPU inference
+# (confirmed: ggml_cuda_init: failed to initialize CUDA: no CUDA-capable
+# device is detected, size_vram=0 in /api/ps). This recreate unit was
+# firing correctly on every docker/containerd restart but recreating into
+# the same broken CDI-less state every time. Regenerating the spec here
+# closes that gap at the same trigger this unit already responds to
+# (reboot, apt upgrade, containerd bounce) - the CDI spec embeds
+# driver-version-specific .so paths (e.g. libnvidia-ml.so.580.173.02), so it
+# also needs refreshing after a deliberate driver upgrade, which this
+# covers for free since that always involves a reboot.
 [Unit]
 Description=Recreate GPU containers (ollama, whisper) after Docker or containerd starts
 After=docker.service containerd.service
@@ -37,6 +56,7 @@ PartOf=docker.service containerd.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+ExecStartPre=/usr/bin/nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
 ExecStart=/usr/bin/docker compose -f /opt/ollama/docker-compose.yml up -d --force-recreate
 ExecStart=/usr/bin/docker compose -f /opt/whisper/docker-compose.yml up -d --force-recreate
 
