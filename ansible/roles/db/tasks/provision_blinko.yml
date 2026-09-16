@@ -47,14 +47,33 @@
     line: "host    blinko   blinko   192.168.1.205/32   md5"
   register: _pg_hba_blinko
 
-- name: Reload Postgres config (picks up the new pg_hba.conf line, no restart)
+# 2026-09-16, user request: ad-hoc access for connecting to the blinko DB
+# by hand over Tailscale (e.g. a local DB client), not app traffic - that
+# still goes over LAN via the rule above. 100.64.0.0/10 is the whole
+# Tailscale CGNAT range (see roles/dns's NordVPN-whitelist task for the
+# same range used elsewhere) - deliberately the whole tailnet rather than
+# one peer IP, per explicit user instruction, not scoped to a single
+# device.
+- name: Allow blinko role to connect from Tailscale
+  lineinfile:
+    path: /opt/postgres/conf/pg_hba.conf
+    insertbefore: '^# local$'
+    line: "host    blinko   blinko   100.64.0.0/10   md5"
+  register: _pg_hba_blinko_ts
+
+- name: Reload Postgres config (picks up the new pg_hba.conf lines, no restart)
   # PGPASSWORD must be forwarded into the container via `docker exec -e`,
   # not just set on the ansible/host-side shell process's own environment -
   # `docker exec` doesn't inherit the caller's env into the container.
+  # -h 127.0.0.1 matters: without it psql uses the container's local unix
+  # socket, which matches a *different* pg_hba.conf line ("local all all
+  # peer") than intended - confirmed live that pg_reload_conf() run this way
+  # doesn't reliably take effect (the newly-added blinko pg_hba line sat
+  # unloaded until reloaded by hand over TCP instead).
   shell: >
     docker exec -e PGPASSWORD={{ pg_password_authentik }} pg-main
-    psql -U {{ pg_user_authentik }} -d {{ pg_db_authentik }} -c "SELECT pg_reload_conf();"
-  when: _pg_hba_blinko is changed
+    psql -h 127.0.0.1 -U {{ pg_user_authentik }} -d {{ pg_db_authentik }} -c "SELECT pg_reload_conf();"
+  when: _pg_hba_blinko is changed or _pg_hba_blinko_ts is changed
 
 - name: Allow Postgres from the webapps VM (UFW)
   ufw:
@@ -62,3 +81,10 @@
     port: "5432"
     proto: tcp
     src: "192.168.1.205"
+
+- name: Allow Postgres from Tailscale (UFW)
+  ufw:
+    rule: allow
+    port: "5432"
+    proto: tcp
+    src: "100.64.0.0/10"
