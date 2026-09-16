@@ -21,7 +21,17 @@ services:
     environment:
       # Safety cap: don't let chat + vision + embedding models all pile up
       # resident in VRAM unbounded while sharing the GPU with Whisper.
-      OLLAMA_MAX_LOADED_MODELS: "2"
+      OLLAMA_MAX_LOADED_MODELS: "3"
+      OLLAMA_KEEP_ALIVE: "24h"
+      # Default was unset -> Ollama's built-in 4096. Confirmed live
+      # (2026-09-14) that's too tight for qwen3.5:9b's thinking mode: the
+      # MoodAgent post-processing call hit done_reason "length" with
+      # prompt_eval_count(689) + eval_count(3407) = 4096 exactly - the model
+      # was cut off mid-thinking, before ever emitting its JSON answer,
+      # content came back completely empty. Raising this grows the KV-cache
+      # VRAM reserved per loaded model (watch nvidia-smi with both slots
+      # from OLLAMA_MAX_LOADED_MODELS above filled + Whisper running).
+      OLLAMA_CONTEXT_LENGTH: "8192"
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 30s
@@ -39,3 +49,17 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    # LAN/Tailscale-only egress (roles/compute/tasks/firewall.yml). CAVEAT:
+    # `ollama pull <new model>` needs WAN the first time any given model is
+    # pulled (already-pulled models, i.e. normal chat/embedding/vision use,
+    # need nothing but LAN) - pulling a model not yet cached under
+    # /opt/ollama/models will need a temporary WAN allowance. Any new
+    # compute service that doesn't need internet access should join this
+    # network too; searxng is the deliberate exception (needs WAN to
+    # actually search).
+    networks:
+      - compute-lan
+
+networks:
+  compute-lan:
+    external: true

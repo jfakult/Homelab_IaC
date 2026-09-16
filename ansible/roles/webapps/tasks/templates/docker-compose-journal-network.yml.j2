@@ -8,6 +8,11 @@
 # by the host firewall - see roles/webapps/tasks/firewall.yml.
 networks:
   blinko-egress:
+    name: blinko-egress   # pin the real name - otherwise Compose prefixes it
+                           # with the project name (the /opt/journal dirname,
+                           # "journal") giving "journal_blinko-egress", which
+                           # broke firewall.yml's `docker network inspect
+                           # blinko-egress` lookup (confirmed live).
     driver: bridge
 
 services:

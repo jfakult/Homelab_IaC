@@ -1,0 +1,12 @@
+# Ansible-managed. NVIDIA driver upgrades are deliberately excluded from
+# unattended-upgrades - confirmed live (2026-09-10) that an overnight driver
+# bump (580.95.05 -> 580.173.02, via DKMS) without a reboot left the loaded
+# kernel module out of sync with the userspace libs ("Failed to initialize
+# NVML: Driver/library version mismatch"), silently dropping Ollama/Whisper
+# back to CPU inference until the host was rebooted. Now only upgraded
+# deliberately (apt, then reboot the VM to load the matching module).
+Unattended-Upgrade::Package-Blacklist {
+    "nvidia-.*";
+    "libnvidia-.*";
+    "xserver-xorg-video-nvidia.*";
+};

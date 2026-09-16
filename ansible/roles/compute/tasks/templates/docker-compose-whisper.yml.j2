@@ -30,7 +30,19 @@ services:
       # Unload after 5 min idle so it isn't permanently resident alongside
       # Ollama - fits this journal's bursty usage pattern (see
       # docs/workstreams/02-whisper-service.md in blinko-journal).
-      STT_MODEL_TTL: "300"
+      #
+      # Was named STT_MODEL_TTL - confirmed live (2026-09-14) that key is
+      # silently ignored: speaches' actual pydantic-settings config field
+      # is whisper.ttl, exposed via the nested WHISPER__ prefix (same
+      # pattern as WHISPER__INFERENCE_DEVICE/WHISPER__COMPUTE_TYPE below),
+      # not a top-level STT_MODEL_TTL. The "300" we were seeing was the
+      # library's own default coinciding with our intended value, not this
+      # var actually doing anything. Transcription requests auto-reload an
+      # idle-evicted-but-still-cached model on demand (server/routers/
+      # stt.py calls model_manager.load_model() every request), so this
+      # TTL is a VRAM-saving knob, not a correctness one - low stakes
+      # either way, but worth being real.
+      WHISPER__TTL: "300"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -48,6 +60,20 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    # LAN/Tailscale-only egress (roles/compute/tasks/firewall.yml). CAVEAT:
+    # this container pulls model weights from Hugging Face on first use of
+    # a given model (see the top-of-file comment) - already cached for
+    # {{ whisper_model }} as of this deploy, so this is safe now, but
+    # switching WHISPER_MODEL to something not already in the
+    # whisper-model-cache volume later will need a temporary WAN allowance
+    # (or a manual pull before locking egress back down) - it will NOT
+    # silently degrade, it'll just fail to start.
+    networks:
+      - compute-lan
+
+networks:
+  compute-lan:
+    external: true
 
 volumes:
   whisper-model-cache:

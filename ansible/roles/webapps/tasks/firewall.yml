@@ -1,9 +1,14 @@
-# Restrict blinko-website's egress network (blinko-egress) to private
-# ranges only (LAN + Tailscale) - blocks the open internet while still
-# allowing every real destination it needs (Ollama/Whisper on the "compute"
-# VM, Postgres on the "db" VM, Pocket-ID/reverse-proxy on "bastion", all
-# 192.168.1.0/24; this session itself over Tailscale, 100.64.0.0/10 - same
-# ranges already allowlisted in roles/bastion/templates/nginx/nginx.conf.j2).
+# blinko-egress gets explicit ACCEPT rules for LAN + Tailscale (every real
+# destination it needs day-to-day: Ollama/Whisper on "compute", Postgres on
+# "db", Pocket-ID/reverse-proxy on "bastion") but, unlike compute-lan, no
+# DROP-all after them - WAN stays open. Deliberate, not an oversight:
+# blinko-journal's embedding pipeline calls out to api.unstructured.io to
+# parse non-text attachments (anything that isn't .pdf/.docx/.txt/.csv/an
+# image falls through to it - confirmed live, including audio attachments,
+# which it can't usefully transcribe anyway but that's a separate app-code
+# gap, not a firewall one). Confirmed live: LAN/Tailscale-only broke this
+# outright (DNS ENOTFOUND for api.unstructured.io from inside the
+# container). Same reasoning as searxng's WAN exception on "compute".
 # Run after the compose stack is up so the blinko-egress network exists.
 
 - name: Install iptables-persistent (non-interactively)
@@ -44,17 +49,17 @@
     iptables -I DOCKER-USER -s {{ _blinko_egress_subnet.stdout }} -d 100.64.0.0/10 -j ACCEPT
   when: _rule_ts.rc != 0
 
-- name: Drop everything else from blinko-egress
+- name: Check for a stale blinko-egress DROP-all rule (from before the WAN exception)
   command: >
     iptables -C DOCKER-USER -s {{ _blinko_egress_subnet.stdout }} -j DROP
   register: _rule_drop
   failed_when: false
   changed_when: false
 
-- name: Insert blinko-egress DROP-all rule (must stay last)
+- name: Remove stale blinko-egress DROP-all rule
   command: >
-    iptables -A DOCKER-USER -s {{ _blinko_egress_subnet.stdout }} -j DROP
-  when: _rule_drop.rc != 0
+    iptables -D DOCKER-USER -s {{ _blinko_egress_subnet.stdout }} -j DROP
+  when: _rule_drop.rc == 0
 
 - name: Persist iptables rules
   community.general.iptables_state:

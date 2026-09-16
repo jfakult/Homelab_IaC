@@ -22,18 +22,98 @@ services:
     environment:
       OLLAMA_BASE_URL: "{{ ollama_base_url }}"
       WEBUI_URL: "https://chat.fakult.net"
+      # We only ever use Ollama as a provider. Left at its default (enabled,
+      # pointed at api.openai.com with no key), Open WebUI polls it on
+      # basically every UI action (get_all_models) - harmless before the
+      # compute-lan WAN lockdown (failed fast), now a real ~10s stall per
+      # call since it just times out instead. Confirmed via open-webui's own
+      # logs (repeating "Connection error" from routers.openai).
+      ENABLE_OPENAI_API: "False"
+
+      # --- Telemetry ---
+      # Not a documented first-party Open WebUI setting - these are
+      # conventions read by bundled libraries. Open WebUI bundles ChromaDB
+      # (RAG vector store), which defaults to phoning PostHog for
+      # "anonymized telemetry"; the image sets ANONYMIZED_TELEMETRY=false
+      # itself already, but there are open reports of it still attempting
+      # the call regardless (open-webui/open-webui#15613, #15624) - set
+      # explicitly as defense-in-depth, not because it's confirmed
+      # sufficient on its own. Deliberately NOT setting CUSTOM_NAME - that's
+      # the one *documented* setting that actively calls api.openwebui.com.
+      ANONYMIZED_TELEMETRY: "False"
+      DO_NOT_TRACK: "True"
 
       # --- Pocket-ID SSO (OIDC) ---
       ENABLE_OAUTH_SIGNUP: "true"
+      # Log in via Pocket-ID and via local email/password both land on the
+      # same account when the emails match, instead of erroring on a
+      # duplicate email - one identity, two ways in (SSO day-to-day, local
+      # password as a break-glass fallback if Pocket-ID is ever down).
+      OAUTH_MERGE_ACCOUNTS_BY_EMAIL: "true"
       OAUTH_CLIENT_ID: "{{ open_webui_oidc_client_id }}"
       OAUTH_CLIENT_SECRET: "{{ open_webui_oidc_client_secret }}"
       OPENID_PROVIDER_URL: "https://sso.fakult.net/.well-known/openid-configuration"
       OAUTH_PROVIDER_NAME: "Pocket ID"
-      OAUTH_SCOPES: "openid email profile"
+      # "groups" scope is Pocket-ID's native mechanism (not "roles" - it has
+      # no separate role concept): request it, get a `groups` claim back as
+      # an array of the user's Pocket-ID group names, in both the ID token
+      # and userinfo response.
+      OAUTH_SCOPES: "openid email profile groups"
+
+      # --- Map Pocket-ID group membership -> Open WebUI role ---
+      # Reuses Open WebUI's *role* management (not its separate *group*
+      # management feature) pointed at Pocket-ID's "groups" claim, since
+      # Pocket-ID doesn't have a distinct roles concept. Members of the
+      # Pocket-ID group named {{ open_webui_admin_group }} get Open WebUI's
+      # admin role on every login (re-evaluated each sign-in, not just on
+      # first signup) - remove someone from that Pocket-ID group and their
+      # next login demotes them back to a regular user, no Open WebUI-side
+      # action needed.
+      ENABLE_OAUTH_ROLE_MANAGEMENT: "true"
+      OAUTH_ROLES_CLAIM: "groups"
+      OAUTH_ALLOWED_ROLES: "*"
+      OAUTH_ADMIN_ROLES: "{{ open_webui_admin_group }}"
+
       # Local email/password login stays enabled alongside OAuth (not
       # OAuth-only) so there's always a fallback admin path - flip to
       # "false" later if you want SSO-only.
       ENABLE_LOGIN_FORM: "true"
+
+      # --- Web search (SearXNG) ---
+      # Docker DNS over the shared `websearch` network, NOT the host LAN IP
+      # - a container on a custom bridge (compute-lan) reaching the host's
+      # own published port needs bridge hairpin NAT, which doesn't reliably
+      # work here (confirmed: timed out). searxng itself does the actual
+      # internet-facing querying; this hop is pure LAN/local traffic.
+      #
+      # CONFIRMED: ENABLE_WEB_SEARCH only seeds this on a genuinely fresh
+      # install - on an already-existing DB it's silently ignored (same
+      # class of issue as DEFAULT_MODELS elsewhere in this file/session).
+      # Left set anyway (harmless, correct for a fresh install), but on this
+      # instance it had to be flipped on by hand: Admin Panel -> Settings ->
+      # Web Search -> Enable Web Search. Check the other fields
+      # (Engine/Query URL/counts) there too rather than assuming they took.
+      ENABLE_WEB_SEARCH: "True"
+      WEB_SEARCH_ENGINE: "searxng"
+      SEARXNG_QUERY_URL: "http://searxng:8080/search?q=<query>"
+      WEB_SEARCH_RESULT_COUNT: "3"
+      WEB_SEARCH_CONCURRENT_REQUESTS: "10"
+
+      # --- Default (non-admin) user permissions ---
+      # Verified against actual source (backend/open_webui/config.py), not
+      # just docs (which are self-admittedly incomplete for this section).
+      # USER_PERMISSIONS_FEATURES_WEB_SEARCH already defaults True upstream
+      # - regular users can already use web search with no override needed,
+      # set explicitly anyway for clarity. USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS
+      # defaults False upstream (lets a user create/import their own custom
+      # Tools - arbitrary server-side Python execution, which is why it's
+      # normally gated) - opened up here per the "only trusted SSO users
+      # can log in at all" reasoning for this instance specifically. Note
+      # granular permissions never apply to admins either way - this only
+      # affects non-admin logins (anyone not in the Pocket-ID
+      # {{ open_webui_admin_group }} group).
+      USER_PERMISSIONS_FEATURES_WEB_SEARCH: "True"
+      USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS: "True"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -44,6 +124,19 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    # compute-lan: LAN/Tailscale-only egress (roles/compute/tasks/firewall.yml)
+    # - reaches Ollama over the LAN, never needs WAN itself.
+    # websearch: shared with searxng only, Docker DNS, sidesteps the
+    # host-hairpin-NAT problem entirely for that one hop.
+    networks:
+      - compute-lan
+      - websearch
+
+networks:
+  compute-lan:
+    external: true
+  websearch:
+    external: true
 
 volumes:
   open-webui-data:

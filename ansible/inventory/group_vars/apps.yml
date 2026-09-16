@@ -34,9 +34,72 @@ blinko_postgres_password: "{{ vault_blinko_postgres_password }}"
 # installs/pulls these) and the webapps role (which points blinko-journal at
 # them). Single source of truth: change a model here, re-run both plays. ---
 ollama_base_url: "http://192.168.1.208:11434"
-ollama_chat_model: "llama3.1"
+# Raw upstream tag - pulled from Ollama's library, used only as the FROM
+# base for the capped variant below (see roles/compute's Modelfile task).
+# Not consumed directly by any app/UI - see ollama_chat_model.
+#
+# Switched from qwen3.5:9b to gemma4:e4b (2026-09-14, user decision).
+# gemma4:e4b is 9.6GB on disk (not the "2B/4B effective" size its name
+# implies - see ollama_extra_models below) - combined with Whisper (~2GB)
+# that's ~11.6GB of a 16GB card, leaving room for one more small model but
+# NOT for qwen3.5:9b (6.6GB) at the same time - confirmed live that trying
+# to keep gemma4:e4b + qwen3.5:9b + Whisper all resident at once (~18GB
+# wanted) forces Ollama to evict/swap regardless of
+# OLLAMA_MAX_LOADED_MODELS, since it's a genuine VRAM shortage, not just a
+# cap being hit.
+ollama_chat_model_base: "gemma4:e4b"
+# {{ ollama_chat_model_base }}-safe - a locally-built variant of
+# ollama_chat_model_base with a hard num_predict ceiling baked in via
+# Modelfile (see roles/compute/tasks/templates/chat-model-capped.Modelfile.j2).
+# Derived from the base var so switching ollama_chat_model_base above
+# automatically cascades here and to ollama_post_processing_model below -
+# no separate tag name to keep in sync by hand. Pinned as the ONE
+# resident chat model on purpose (single GPU, 16GB, shared with Whisper -
+# user wants one model loaded, not a picker).
+#
+# Why the capped variant exists (originally built for qwen3.5:9b, kept as
+# a standing safety net for whichever model is pinned - see the
+# Modelfile's own comment for full detail): qwen3.5:9b was flagged
+# "CONFIRMED BROKEN" from an early stress test (ran 2800-3900+ tokens on
+# "say hi in one word" without stopping), retested clean once, then
+# reproduced LIVE in production (2026-09-14) - a real task ran 40,000+
+# tokens with no stop, pinning the GPU for ~2 hours until killed by hand.
+# Ollama's default num_predict is unbounded (-1), so nothing capped
+# worst-case generation time without this.
+ollama_chat_model: "{{ ollama_chat_model_base }}-safe"
 ollama_embedding_model: "nomic-embed-text"
 ollama_vision_model: "llava"
+# Separate, smaller model for blinko-journal's AI post-processing pipeline
+# (tag suggestion/note analysis after save) - NOT the same as Open WebUI's
+# "Local Task Model" setting (that's DB-stored/UI-only, unrelated - same
+# qwen3:1.7b tag, but that one's DB-stored via the Open WebUI admin UI,
+# this one's this env var). Pinned to qwen3:1.7b: fast, stops reliably,
+# no "thinking" overhead - post-processing with the full-size chat model
+# (qwen3.5:9b at the time) was confirmed live taking 193s+ per note and
+# still failing to complete (3 chained tool-calling LLM turns, each slow
+# from thinking mode / general model size). Not yet consumed by the app -
+# blinko-journal doesn't read OLLAMA_POST_PROCESSING_MODEL until a
+# pending code change ships; wiring this through now so it's ready the
+# moment it does. Already in ollama_extra_models below, so it's pulled
+# either way.
+ollama_post_processing_model: "qwen3:1.7b"
+
+# Pulled alongside the three above but NOT wired into any config - just
+# available in Ollama/Open WebUI for manual side-by-side comparison. Swap
+# ollama_chat_model_base above if one of these wins out.
+ollama_extra_models:
+  - "qwen3:8b"     # 5.2GB - previous default, dense, reliable tool-calling
+  - "qwen3.5:0.8b" # 1.0GB - same Qwen3.5 line as the former default, untested since the retest above (only qwen3.5:9b was re-verified)
+  - "qwen3.5:9b"   # 6.6GB - former pinned default (see ollama_chat_model_base
+                    # history above) - kept pulled for easy side-by-side/revert.
+  - "gemma4:12b"   # 7.6GB - dense, tool-calling, vision
+  # VALIDATED as Open WebUI's "Local Task Model" (title/tags/follow-ups):
+  # stress-tested with the same "say hi in one word" prompt that broke
+  # 3.5 - stopped correctly both cold (16s) and warm (1.47s) runs,
+  # 100% GPU, ~157 tok/s. Still Set this in the Open WebUI admin UI
+  # (Settings -> Interface -> Tasks -> Local Task Model) - that setting is
+  # DB-stored, not env-var driven, same as several others this session.
+  - "qwen3:1.7b"   # 1.4GB - not for real chat use, task-model only
 
 # Whisper reached over the LAN (not Docker DNS - see
 # docs/workstreams/02-whisper-service.md in blinko-journal for why the
@@ -51,3 +114,17 @@ whisper_model: "Systran/faster-whisper-medium"
 # for it as of this writing.
 open_webui_oidc_client_id: "{{ vault_open_webui_oidc_client_id }}"
 open_webui_oidc_client_secret: "{{ vault_open_webui_oidc_client_secret }}"
+# Must exactly match (case-sensitive) the name of a group in Pocket-ID's
+# admin UI. Its members get Open WebUI's admin role on every login - see
+# the compute role's Open WebUI compose template for the full mechanism.
+open_webui_admin_group: "admin"
+
+# SearXNG (web search backend for Open WebUI). Generate with `openssl rand
+# -hex 32`.
+searxng_secret_key: "{{ vault_searxng_secret_key }}"
+
+# Fixed subnet for the "compute-lan" Docker network (Ollama/Whisper/Open
+# WebUI - LAN/Tailscale-only egress, see roles/compute/tasks/firewall.yml).
+# Pinned rather than Docker-assigned so the firewall rule doesn't need a
+# `docker network inspect` step to discover it.
+compute_lan_subnet: "172.30.0.0/24"

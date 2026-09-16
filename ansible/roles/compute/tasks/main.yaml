@@ -24,6 +24,33 @@
     state: present
     update_cache: yes
 
+# Exclude NVIDIA driver packages from unattended-upgrades - see the template
+# for why (a silent overnight driver bump without a reboot broke GPU access
+# for hours, confirmed live). Deliberate-only from here: apt upgrade + a
+# reboot of this VM when we actually want a newer driver.
+- name: Exclude NVIDIA driver packages from unattended-upgrades
+  template:
+    src: 51unattended-upgrades-nvidia-blacklist.j2
+    dest: /etc/apt/apt.conf.d/51unattended-upgrades-nvidia-blacklist
+    mode: "0644"
+
+# Exclude containerd from needrestart's auto-restart - see the template for
+# why (needrestart auto-bounces containerd.service on routine library
+# upgrades, e.g. libc6, breaking GPU access for already-running containers
+# without docker.service itself restarting - confirmed live). needrestart
+# is a stock Ubuntu package (already present), just adding our override.
+- name: Ensure needrestart conf.d directory exists
+  file:
+    path: /etc/needrestart/conf.d
+    state: directory
+    mode: "0755"
+
+- name: Exclude containerd from needrestart auto-restart
+  template:
+    src: needrestart-containerd-exclude.conf.j2
+    dest: /etc/needrestart/conf.d/51-containerd-exclude.conf
+    mode: "0644"
+
 # --- NVIDIA Container Toolkit (idempotent - already present on this host as
 # of this writing, but the role should be able to provision a fresh compute
 # VM from scratch too) ---
@@ -61,6 +88,34 @@
 - name: Flush handlers so docker is ready before compose up
   meta: flush_handlers
 
+# --- Shared LAN/Tailscale-only network (Ollama, Whisper, Open WebUI) ---
+# searxng deliberately does NOT join this - see docker-compose-searxng.yml.j2.
+- name: Install docker Python SDK (needed by community.docker modules)
+  # apt, not pip - Ubuntu 24.04 blocks system-wide pip installs (PEP 668,
+  # "externally-managed-environment"). The Debian-packaged python3-docker
+  # is the correct fix, not --break-system-packages.
+  apt:
+    name: python3-docker
+    state: present
+
+- name: Create compute-lan Docker network (fixed subnet, firewalled below)
+  community.docker.docker_network:
+    name: compute-lan
+    driver: bridge
+    ipam_config:
+      - subnet: "{{ compute_lan_subnet }}"
+    state: present
+
+# Open WebUI <-> searxng only, Docker DNS - a container on compute-lan
+# reaching the host's own LAN IP for a published port needs bridge hairpin
+# NAT, which doesn't reliably work here (confirmed broken by direct test).
+# No fixed subnet needed - purely local, never touches the firewalled path.
+- name: Create websearch Docker network (Open WebUI <-> searxng)
+  community.docker.docker_network:
+    name: websearch
+    driver: bridge
+    state: present
+
 # --- Ollama ---
 - name: Drop Ollama compose file
   template:
@@ -87,12 +142,35 @@
 
 - name: Pull Ollama models
   command: docker exec ollama ollama pull {{ item }}
-  loop:
-    - "{{ ollama_chat_model }}"
-    - "{{ ollama_embedding_model }}"
-    - "{{ ollama_vision_model }}"
+  # ollama_chat_model_base (raw upstream tag), not ollama_chat_model (the
+  # locally-built capped variant below) - the capped tag doesn't exist on
+  # any registry, it's built from this pull, not pulled itself.
+  loop: "{{ [ollama_chat_model_base, ollama_embedding_model, ollama_vision_model] + (ollama_extra_models | default([])) }}"
   register: _ollama_pull
   changed_when: "'success' in _ollama_pull.stdout or 'up to date' in _ollama_pull.stdout" # noqa
+  tags: ollama
+
+# --- Runaway-generation ceiling ---
+# See apps.yml's ollama_chat_model comment for the full incident history.
+# Builds a second local tag layered on the raw pull with a hard
+# num_predict ceiling baked in, so every consumer (blinko-journal chat +
+# post-processing, Open WebUI) is protected without passing per-request
+# options - single source of truth, same pattern as the model-pin vars.
+- name: Template capped-generation Modelfile
+  template:
+    src: chat-model-capped.Modelfile.j2
+    dest: /opt/ollama/chat-model-capped.Modelfile
+    mode: "0644"
+  tags: ollama
+
+- name: Copy capped-generation Modelfile into the Ollama container
+  command: docker cp /opt/ollama/chat-model-capped.Modelfile ollama:/tmp/chat-model-capped.Modelfile
+  tags: ollama
+
+- name: Build capped-generation model variant
+  command: docker exec ollama ollama create {{ ollama_chat_model }} -f /tmp/chat-model-capped.Modelfile
+  register: _ollama_capped_build
+  changed_when: "'success' in _ollama_capped_build.stdout"
   tags: ollama
 
 # --- Whisper (speaches) ---
@@ -118,6 +196,41 @@
   delay: 5
   until: _whisper_ready.status == 200
   tags: whisper
+
+# --- Self-healing GPU access ---
+# Docker+NVIDIA has a well-known failure mode: a container's GPU cgroup
+# device access is bound to the dockerd process instance it started under,
+# so any Docker daemon restart (host reboot, `apt upgrade`, unattended-
+# upgrades, ansible's own nvidia-ctk-triggered restart above) leaves
+# already-running GPU containers unable to see the GPU
+# ("Failed to initialize NVML: Unknown Error" from inside the container)
+# until they're recreated - `docker restart` alone does NOT fix this, only
+# a full recreate does. This makes that automatic instead of something
+# that has to be caught and fixed by hand after the fact.
+- name: Drop GPU-containers-recreate systemd unit
+  template:
+    src: gpu-containers-recreate.service.j2
+    dest: /etc/systemd/system/gpu-containers-recreate.service
+    mode: "0644"
+  register: _gpu_recreate_unit
+  tags: [ollama, whisper]
+
+- name: Reload systemd units
+  systemd:
+    daemon_reload: true
+  when: _gpu_recreate_unit is changed
+  tags: [ollama, whisper]
+
+- name: Enable + run GPU-containers-recreate unit now
+  # state: started (not just enabled) so a from-scratch run of this role is
+  # self-sufficient - don't rely on a human to catch/fix a broken first-run
+  # GPU state the way this had to be done manually today. Harmless/no-op
+  # recreate if containers already have working GPU access.
+  systemd:
+    name: gpu-containers-recreate.service
+    enabled: true
+    state: started
+  tags: [ollama, whisper]
 
 # --- GPU capacity sanity check (informational, not a hard gate - see
 # docs/workstreams/02-whisper-service.md in blinko-journal for what to
@@ -156,3 +269,45 @@
   delay: 5
   until: _open_webui_ready.status == 200
   tags: chat
+
+# --- SearXNG (web search backend for Open WebUI - the one service on this
+# host with real WAN access, see docker-compose-searxng.yml.j2) ---
+- name: Ensure searxng directory
+  file:
+    path: /opt/searxng
+    state: directory
+  tags: chat
+
+- name: Drop searxng settings.yml
+  template:
+    src: searxng-settings.yml.j2
+    dest: /opt/searxng/settings.yml
+    mode: "0644"
+  tags: chat
+
+- name: Drop searxng compose file
+  template:
+    src: docker-compose-searxng.yml.j2
+    dest: /opt/searxng/docker-compose.yml
+    mode: "0644"
+  tags: chat
+
+- name: Bring up searxng
+  shell: docker compose up -d
+  args:
+    chdir: /opt/searxng
+  tags: chat
+
+- name: Wait for searxng to be healthy
+  uri:
+    url: http://localhost:8888/healthz
+    status_code: 200
+  register: _searxng_ready
+  retries: 20
+  delay: 5
+  until: _searxng_ready.status == 200
+  tags: chat
+
+- name: Restrict compute-lan to LAN/Tailscale
+  import_tasks: firewall.yml
+  tags: [ollama, whisper, chat]

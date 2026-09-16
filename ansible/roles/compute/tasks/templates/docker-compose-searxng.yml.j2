@@ -1,0 +1,49 @@
+# SearXNG (https://github.com/searxng/searxng) - self-hosted metasearch
+# engine, used as Open WebUI's web-search backend (see the open-webui
+# compose file's ENABLE_WEB_SEARCH block). Deliberately kept OFF the
+# `compute-lan` network everything else on this host is restricted to
+# (roles/compute/tasks/firewall.yml) - this is the one service that
+# genuinely needs to reach the open internet, since it's the thing actually
+# querying upstream search engines.
+#
+# Reached by Open WebUI via the shared `websearch` network (Docker DNS,
+# `searxng:8080`) - NOT via the host's own LAN IP. A container reaching the
+# host's own published port on a custom bridge network needs hairpin NAT
+# back through that bridge, which doesn't reliably work the way it does on
+# Docker's default bridge - confirmed broken (curl from inside open-webui
+# to 192.168.1.208:8888 timed out even though searxng answered fine
+# directly). Direct container-to-container on a shared network sidesteps
+# the whole question.
+
+services:
+  searxng:
+    image: docker.io/searxng/searxng:latest
+    container_name: searxng
+    restart: unless-stopped
+    ports:
+      - "8888:8080"
+    volumes:
+      - /opt/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      SEARXNG_BASE_URL: "http://192.168.1.208:8888/"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Two networks: default (unrestricted, for WAN - actual search engine
+    # queries) plus `websearch` (shared with open-webui only, LAN-only
+    # traffic, not subject to compute-lan's WAN block since it's a
+    # completely separate network).
+    networks:
+      - default
+      - websearch
+
+networks:
+  websearch:
+    external: true

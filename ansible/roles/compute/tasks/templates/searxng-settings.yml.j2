@@ -1,0 +1,26 @@
+# Minimal SearXNG config - inherits SearXNG's own shipped defaults
+# (use_default_settings) and only overrides what this deployment actually
+# needs, so upstream additions to the default settings arrive automatically
+# on image updates instead of this file silently drifting out of date.
+use_default_settings: true
+
+general:
+  instance_name: "compute-searxng"
+
+server:
+  secret_key: "{{ searxng_secret_key }}"
+  # Private instance, only ever called by Open WebUI's backend (not a real
+  # browser, not exposed to the internet) - SearXNG's bot-detection rate
+  # limiter is built for public-facing instances and blocks exactly this
+  # kind of server-to-server traffic if left on (this is what the "no
+  # sources found" / 403 failure mode people hit is - not a bug, the
+  # limiter doing its job against traffic that isn't actually a bot).
+  limiter: false
+  image_proxy: true
+
+search:
+  # json is mandatory - Open WebUI queries SearXNG's JSON API, not its HTML
+  # UI. Without this, every request from Open WebUI 403s.
+  formats:
+    - html
+    - json
