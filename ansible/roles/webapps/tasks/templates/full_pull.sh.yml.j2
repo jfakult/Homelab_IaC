@@ -1,4 +1,14 @@
 #!/bin/bash
+set -e
 
 docker compose pull blinko-website
 docker compose up -d --force-recreate blinko-website
+
+# `docker compose pull` never removes the image it replaces - the old one
+# just goes dangling (untagged) and sits on disk forever. Nothing else on
+# this host ever pruned them, so ~20 accumulated over a week at 1.2GB each
+# and filled the disk to 100% (confirmed live 2026-09-14 - "no space left
+# on device" mid-pull). -f (no confirmation prompt) since this runs
+# unattended; only removes dangling images, never anything a running
+# container still references.
+docker image prune -f

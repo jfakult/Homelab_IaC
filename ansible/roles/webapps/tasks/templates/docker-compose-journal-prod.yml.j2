@@ -20,6 +20,7 @@ services:
       OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL}
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL}
       OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL}
+      OLLAMA_POST_PROCESSING_MODEL: ${OLLAMA_POST_PROCESSING_MODEL}
       WHISPER_BASE_URL: ${WHISPER_BASE_URL:-}
       WHISPER_MODEL: ${WHISPER_MODEL}
     volumes:
@@ -31,8 +32,12 @@ services:
         max-file: "3"
     ports:
       - 1111:1111
+    # wget, not curl - this image (Alpine) has no curl, which was silently
+    # making the healthcheck exec itself fail every time regardless of the
+    # app's actual health (confirmed live: HTTP 200 on / the whole time,
+    # container still reported "unhealthy" for 28+ hours because of this).
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://blinko-website:1111/"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://blinko-website:1111/"]
       interval: 30s
       timeout: 10s
       retries: 5
