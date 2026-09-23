@@ -19,9 +19,30 @@ services:
       - "3000:8080"
     volumes:
       - open-webui-data:/app/backend/data
+      # --- Custom branding (FakChat) ---
+      # Overriding the frontend build's static assets directly, not the
+      # persistent data volume above - confirmed live these are plain
+      # files at /app/build/static/*, not env/DB-driven. Dark logo used
+      # for every single-slot asset (favicon, logo.png - the latter also
+      # doubles as the PWA install icon, see main.yaml) per preference;
+      # light/dark pair used where the frontend actually supports both
+      # (splash screen only).
+      - /opt/open-webui/branding/logo_f_dark_256.png:/app/build/static/favicon.png:ro
+      - /opt/open-webui/branding/logo_f_dark_256.png:/app/build/static/logo.png:ro
+      - /opt/open-webui/branding/logo_f_light_256.png:/app/build/static/splash.png:ro
+      - /opt/open-webui/branding/logo_f_dark_256.png:/app/build/static/splash-dark.png:ro
+      - /opt/open-webui/branding/logo_f_dark_256.png:/app/build/static/web-app-manifest-192x192.png:ro
+      - /opt/open-webui/branding/logo_f_dark_256.png:/app/build/static/web-app-manifest-512x512.png:ro
     environment:
       OLLAMA_BASE_URL: "{{ ollama_base_url }}"
       WEBUI_URL: "https://chat.fakult.net"
+      # Displays as "FakChat (Open WebUI)" - Open WebUI's own code
+      # (backend/open_webui/env.py) hardcodes appending " (Open WebUI)" to
+      # any customized WEBUI_NAME as a license-driven branding requirement,
+      # confirmed live (2026-09-17) and not something we override. Also
+      # drives the PWA install manifest's name/short_name (main.py) - same
+      # text for the browser tab and an installed home-screen icon.
+      WEBUI_NAME: "FakChat"
       # We only ever use Ollama as a provider. Left at its default (enabled,
       # pointed at api.openai.com with no key), Open WebUI polls it on
       # basically every UI action (get_all_models) - harmless before the

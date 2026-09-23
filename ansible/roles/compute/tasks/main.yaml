@@ -288,6 +288,37 @@
   tags: whisper
 
 # --- Open WebUI (chat UI in front of Ollama, no GPU needed itself) ---
+# Custom branding: FakChat name + logo, overriding Open WebUI's default
+# assets by bind-mounting over the frontend build's static files (see
+# docker-compose-open-webui.yml.j2's volumes) - confirmed live (2026-09-17)
+# these are plain static files at /app/build/static/*, not something set
+# via an env var or persisted DB config, so a file-mount override is the
+# only mechanism. WEBUI_NAME itself (set below in the compose env) also
+# drives the dynamically-generated PWA install manifest (backend/
+# open_webui/main.py) - same name shown for the browser tab and an
+# installed/home-screen icon, no separate config needed for that.
+- name: Ensure Open WebUI branding directory exists
+  file:
+    path: /opt/open-webui/branding
+    state: directory
+    mode: "0755"
+  tags: chat
+
+- name: Copy Open WebUI branding logos
+  # Explicit role_path-relative src, not a bare filename - `copy` only
+  # auto-searches a role's files/ dir, not tasks/templates/ (that's
+  # `template`'s search path, and Jinja-templating a binary PNG would
+  # corrupt it anyway) - confirmed live (2026-09-17), files live in
+  # tasks/templates/ alongside the compose .j2 templates.
+  copy:
+    src: "{{ role_path }}/tasks/templates/{{ item }}"
+    dest: "/opt/open-webui/branding/{{ item }}"
+    mode: "0644"
+  loop:
+    - logo_f_light_256.png
+    - logo_f_dark_256.png
+  tags: chat
+
 - name: Drop Open WebUI compose file
   template:
     src: docker-compose-open-webui.yml.j2
