@@ -45,6 +45,14 @@ exporters_net: "exporters"
 prometheus_scrape_interval: "30s"
 exporters_dir: "/opt/exporters"
 
+# Local postfix-relay container (roles/monitoring) - relays alertmanager's
+# email alerts out through Gmail. RELAYHOST_PASSWORD is a Gmail App
+# Password (Google Account -> Security -> App passwords), NOT the regular
+# account password - vaulted as vault_smtp_relay_password, add via
+# `ansible-vault edit inventory/group_vars/all/vault.yml`.
+smtp_relay_host: "[smtp.gmail.com]:587"
+smtp_relay_username: "jfakult15@gmail.com"
+
 
 # Prometheus jobs (targets are host:port; exporters expose on 9113, 9100, 9101-like default ports below)
 prometheus_targets:

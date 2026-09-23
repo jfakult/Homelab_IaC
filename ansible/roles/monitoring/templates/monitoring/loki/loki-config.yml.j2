@@ -4,6 +4,12 @@ server:
   http_listen_port: 3100
 
 ingester:
+  # Default WAL dir is /wal - not under the /loki volume mount, and not
+  # writable by the image's non-root uid (10001) since it's bare container
+  # root filesystem. Third of three bugs behind the 2026-09-17 crash-loop
+  # fix, found by iterating past each prior error in turn.
+  wal:
+    dir: /loki/wal
   lifecycler:
     ring:
       kvstore:
@@ -31,6 +37,16 @@ storage_config:
     cache_location: /loki/boltdb-cache
   filesystem:
     directory: /loki/chunks
+
+# Loki auto-enables the compactor when boltdb-shipper is in use (see its
+# own startup log: "initializing compactor to operator on..."), but 2.9.x
+# doesn't default working_directory to anything - left unset, it tries
+# mkdir("") and crash-loops on every start. Confirmed live (2026-09-17):
+# this was the second of two bugs behind a 5-week loki crash loop
+# (permission-denied on /loki/chunks was the first - see loki-data's
+# ownership, must be 10001:10001 to match the image's non-root user).
+compactor:
+  working_directory: /loki/compactor
 
 chunk_store_config:
   max_look_back_period: 168h

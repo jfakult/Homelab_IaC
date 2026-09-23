@@ -1,3 +1,14 @@
+# Confirmed live (2026-09-17): no smtp_smarthost here at all was the root
+# cause of a 5-week-plus alertmanager crash loop (fatal on initial config
+# load, not just a failed-to-send warning). Points at the local
+# postfix-relay container (same compose project/network, Docker DNS) which
+# does the actual Gmail relay auth - alertmanager itself sends unauthenticated
+# local SMTP only.
+global:
+  smtp_smarthost: "postfix-relay:25"
+  smtp_from: "{{ smtp_relay_username }}"
+  smtp_require_tls: false
+
 route:
   receiver: default-receiver
   
