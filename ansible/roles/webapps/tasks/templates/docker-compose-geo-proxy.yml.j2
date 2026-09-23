@@ -1,0 +1,36 @@
+# Small reverse-geocoding proxy (place/name from lat/lon coords) fronting
+# Nominatim/OpenStreetMap. Plain python:3.12-alpine image + a stdlib-only
+# script bind-mounted in from /opt/geo-proxy - no Dockerfile/build step,
+# consistent with the rest of this repo (webapps has no image-build pipeline
+# other than blinko-journal's, which lives in its own repo).
+#
+# Deliberately NOT on blinko-egress or any custom network: it needs normal
+# outbound (to reach Nominatim), and this host has no WAN-facing interface or
+# router port-forward for {{ geo_proxy_port }}, so the default Docker network
+# already gives LAN + Tailscale reachability in and open egress out with no
+# DOCKER-USER rules needed (see roles/webapps/tasks/firewall.yml for the
+# opposite case - restricting egress - which doesn't apply here).
+
+services:
+  geo-proxy:
+    image: python:3.12-alpine
+    container_name: geo-proxy
+    command: ["python3", "/app/geo_proxy_app.py"]
+    volumes:
+      - /opt/geo-proxy/geo_proxy_app.py:/app/geo_proxy_app.py:ro
+    environment:
+      PORT: "{{ geo_proxy_port }}"
+      CONTACT_EMAIL: "{{ geo_proxy_contact_email }}"
+    restart: always
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    ports:
+      - "{{ geo_proxy_port }}:{{ geo_proxy_port }}"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:{{ geo_proxy_port }}/health', timeout=3)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s

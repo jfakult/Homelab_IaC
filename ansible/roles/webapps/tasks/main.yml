@@ -126,6 +126,44 @@
   import_tasks: firewall.yml
   tags: journal
 
+- name: Ensure geo-proxy directory
+  file:
+    path: /opt/geo-proxy
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  tags: geo-proxy
+
+- name: Drop geo-proxy app script
+  copy:
+    src: geo_proxy_app.py
+    dest: /opt/geo-proxy/geo_proxy_app.py
+    mode: "0644"
+  tags: geo-proxy
+  notify: Restart geo-proxy docker
+
+- name: Drop geo-proxy compose
+  template:
+    src: docker-compose-geo-proxy.yml.j2
+    dest: /opt/geo-proxy/docker-compose.yml
+    mode: "0644"
+  tags: geo-proxy
+  notify: Restart geo-proxy docker
+
+- name: Pull geo-proxy image
+  shell: docker compose pull
+  args:
+    chdir: /opt/geo-proxy
+  tags: geo-proxy
+  changed_when: false
+
+- name: Bring up geo-proxy stack
+  shell: docker compose up -d
+  args:
+    chdir: /opt/geo-proxy
+  tags: geo-proxy
+
 - name: Move full pull script to /srv
   template:
     src: full_pull.sh.yml.j2

@@ -71,3 +71,11 @@ prometheus_targets:
     - { target: "192.168.1.206" }  # Media Server
     - { target: "192.168.1.202" }  # DNS
     - { target: "192.168.1.211" }  # Monitoring Server
+
+# geo-proxy (webapps): reverse-geocoding proxy in front of Nominatim/OSM.
+# No vault entry - Nominatim needs no API key, just a contact identifier per
+# its usage policy (https://operations.osmfoundation.org/policies/nominatim/),
+# reusing the address already used for SMTP alerts. Not in `subdomains` /
+# `prometheus_targets` on purpose: LAN + Tailscale only, no bastion route.
+geo_proxy_port: 8091
+geo_proxy_contact_email: "{{ smtp_relay_username }}"

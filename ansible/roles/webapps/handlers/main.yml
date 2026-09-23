@@ -12,3 +12,9 @@
   shell: docker compose -f docker-compose.yml -f docker-compose-network.yml up -d --force-recreate
   args: { chdir: /opt/journal }
   ignore_errors: true
+
+- name: Restart geo-proxy docker
+  # force-recreate so the bind-mounted app.py is re-read on every deploy of it
+  shell: docker compose up -d --force-recreate
+  args: { chdir: /opt/geo-proxy }
+  ignore_errors: true
