@@ -107,6 +107,13 @@ http {
 		  autoindex on;
 		}
 
+    # /srv/www/_webapps is the NAS backup mirror of the webapps VM's app source
+    # (roles/webapps, webapps-nas-sync) - it sits inside the web root but must
+    # never be served. ^~ so no regex location can take it over.
+    location ^~ /_webapps {
+        return 404;
+    }
+
     # Catch-all fallback
     location / {
         allow all;

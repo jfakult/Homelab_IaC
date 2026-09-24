@@ -1,0 +1,14 @@
+[Unit]
+Description=Mirror /srv/webapps to the NAS (/srv/www/_webapps)
+RequiresMountsFor=/srv/www
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/srv/sync_webapps_to_nas.sh
+# Background job - stay out of the way of the running apps
+Nice=19
+IOSchedulingClass=idle
+# NFS is mounted "hard": if the NAS disappears mid-sync, don't hang forever
+TimeoutStartSec=2h
