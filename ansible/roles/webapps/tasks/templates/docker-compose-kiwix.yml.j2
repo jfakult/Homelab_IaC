@@ -4,16 +4,38 @@ services:
     container_name: kiwix
     restart: unless-stopped
     entrypoint: /bin/sh
+    # Library is rebuilt from scratch on every start, inside the container
+    # (the zims are its only source of truth), so the NAS mounts can be ro.
     command: -c "
-      kiwix-manage /data/kiwix/zim_cache/library.xml add /data/kiwix/zim_array/*.zim;
-      kiwix-manage /data/kiwix/zim_cache/library.xml add /data/kiwix/zim_cache/*.zim;
-      exec kiwix-serve --port=3090 --library /data/kiwix/zim_cache/library.xml --urlRootLocation=/wikipedia"
+      rm -f /tmp/library.xml;
+      kiwix-manage /tmp/library.xml add /mnt/nas/kiwix/zim/*.zim;
+      kiwix-manage /tmp/library.xml add /mnt/www/kiwix/zim/*.zim;
+      exec kiwix-serve --port=3090 --library /tmp/library.xml --urlRootLocation=/wikipedia"
+    # Bind the NAS share *roots*, not subdirectories: the Unraid NAS drops NFS
+    # handles, and a bind of a subdir then stays "Stale file handle" (116)
+    # until the container restarts, while the export root's handle never goes
+    # stale and the client re-resolves paths below it.
     volumes:
-      - /srv/nas/kiwix/zim:/data/kiwix/zim_array:ro
-      - /srv/www/kiwix/zim:/data/kiwix/zim_cache:rw
+      - /srv/nas:/mnt/nas:ro
+      - /srv/www:/mnt/www:ro
     ports:
       - "3090:3090"
-      
+    # Reads a little from every zim (not just "is the process up"), so it
+    # catches stale NAS NFS handles in the bind mounts ("error 116 opening
+    # file"). docker-autoheal.timer restarts the container when unhealthy.
+    healthcheck:
+      test: ["CMD-SHELL", "for f in /mnt/nas/kiwix/zim/*.zim /mnt/www/kiwix/zim/*.zim; do wget -q -O /dev/null http://127.0.0.1:3090/wikipedia/raw/$$(basename $$f .zim)/meta/Title || exit 1; done"]
+      interval: 5m
+      timeout: 30s
+      retries: 2
+      start_period: 2m
+    labels:
+      autoheal: "true"
+      # The healthcheck can't see this one: kiwix keeps serving most pages
+      # while individual reads of an open zim fail on a stale NAS handle
+      # ("Cannot mmap ... : Stale file handle", pages 404/500).
+      autoheal.log_pattern: "Stale file handle"
+
   node_exporter:
     image: quay.io/prometheus/node-exporter:latest
     container_name: node_exporter

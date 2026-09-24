@@ -1,0 +1,9 @@
+[Unit]
+Description=Restart unhealthy containers labelled autoheal=true
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/docker-autoheal.sh
+TimeoutStartSec=10min

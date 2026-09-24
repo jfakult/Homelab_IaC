@@ -64,6 +64,33 @@
   tags: kiwix
   when: kiwix_ps.stdout == ""
 
+# Restarts unhealthy containers labelled autoheal=true (kiwix: stale NAS NFS
+# handles in its bind mounts - see the kiwix compose healthcheck)
+- name: Drop docker-autoheal script
+  copy:
+    src: docker-autoheal.sh
+    dest: /usr/local/sbin/docker-autoheal.sh
+    mode: "0755"
+  tags: kiwix
+
+- name: Drop docker-autoheal systemd units
+  copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - docker-autoheal.service
+    - docker-autoheal.timer
+  tags: kiwix
+
+- name: Enable docker-autoheal timer
+  systemd:
+    name: docker-autoheal.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  tags: kiwix
+
 - name: Ensure journal directory
   file:
     path: "/opt/journal"
