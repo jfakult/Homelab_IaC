@@ -24,5 +24,6 @@ variable "vms" {
     memory  = optional(number, 2048)  # template default = 2 GB
     balloon = optional(number, 768)  # template default = 768 MB
     disk    = optional(number, 10)    # template default = 10 GB
+    cpu_type = optional(string, "qemu64") # template default; compute uses "host"
   }))
 }

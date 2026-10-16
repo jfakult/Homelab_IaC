@@ -114,6 +114,13 @@ http {
         return 404;
     }
 
+    # Alias: /juggling[/...] -> /juggle/[...] (static site in /srv/www/juggle)
+    # (rewrite, not `return ... $1`: $1 is URL-decoded, rewrite re-encodes)
+    location ~ ^/juggling(?:/|$) {
+        allow all;
+        rewrite ^/juggling/?(.*)$ /juggle/$1 permanent;
+    }
+
     # Catch-all fallback
     location / {
         allow all;

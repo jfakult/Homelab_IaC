@@ -1,0 +1,14 @@
+[Unit]
+Description=Wait (bounded) for NAS NFS mounts before Docker starts
+After=network-online.target remote-fs.target
+Wants=network-online.target
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/nas-wait.sh
+TimeoutStartSec={{ (nas_wait_seconds | default(180) | int) + 60 }}
+
+[Install]
+WantedBy=multi-user.target

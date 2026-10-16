@@ -64,32 +64,13 @@
   tags: kiwix
   when: kiwix_ps.stdout == ""
 
-# Restarts unhealthy containers labelled autoheal=true (kiwix: stale NAS NFS
-# handles in its bind mounts - see the kiwix compose healthcheck)
-- name: Drop docker-autoheal script
-  copy:
-    src: docker-autoheal.sh
-    dest: /usr/local/sbin/docker-autoheal.sh
-    mode: "0755"
-  tags: kiwix
-
-- name: Drop docker-autoheal systemd units
-  copy:
-    src: "{{ item }}"
-    dest: "/etc/systemd/system/{{ item }}"
-    mode: "0644"
-  loop:
-    - docker-autoheal.service
-    - docker-autoheal.timer
-  tags: kiwix
-
-- name: Enable docker-autoheal timer
-  systemd:
-    name: docker-autoheal.timer
-    enabled: true
-    state: started
-    daemon_reload: true
-  tags: kiwix
+# NAS safeguards: bounded boot wait for the NFS mounts, watchdog, and
+# docker-autoheal (kiwix: stale NAS NFS handles - see its compose healthcheck)
+- name: NAS resilience (boot ordering, watchdog, autoheal)
+  import_tasks: ../../misc/tasks/nas_resilience.yml
+  vars:
+    nas_mount_paths: [/srv/www, /srv/nas]
+  tags: [kiwix, nas]
 
 - name: Ensure journal directory
   file:
@@ -242,6 +223,25 @@
     group: "100"
     mode: "0644"
   tags: webapps-sync
+
+# Nightly jobpipe run (script lives on the NAS share, not in git/Ansible)
+- name: Drop jobpipe systemd units
+  copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - jobpipe.service
+    - jobpipe.timer
+  tags: jobpipe
+
+- name: Enable jobpipe timer
+  systemd:
+    name: jobpipe.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  tags: jobpipe
 
 # Webapps must be added manually. They are not on the NAS.
 - name: Run webappctl scan

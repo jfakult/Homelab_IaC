@@ -5,6 +5,18 @@ services:
     user: "{{ jellyfin_uid }}:{{ jellyfin_gid }}"
     network_mode: "host"
     restart: "unless-stopped"
+    # The image's healthcheck only curls the API; also require /media to list
+    # (catches stale NFS handles / an empty mountpoint). docker-autoheal
+    # restarts it when unhealthy or when "Stale file handle" shows in logs.
+    healthcheck:
+      test: ["CMD-SHELL", "curl --noproxy 'localhost' -Lk -fsS \"$${HEALTHCHECK_URL}\" >/dev/null && [ -n \"$$(ls /media | head -1)\" ]"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
+    labels:
+      autoheal: "true"
+      autoheal.log_pattern: "Stale file handle"
     environment:
         - JELLYFIN_PublishedServerUrl={{ jellyfin_external_scheme }}://{{ jellyfin_external_host }}{{ jellyfin_base_path }}
     volumes:

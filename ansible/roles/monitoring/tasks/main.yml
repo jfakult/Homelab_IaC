@@ -56,8 +56,8 @@
 - name: Fix perms for loki data directory
   file:
     path: /opt/monitoring/loki-data
-    owner: 472
-    group: 472
+    owner: 10001  # loki runs as uid 10001; 472 (grafana) breaks WAL writes
+    group: 10001
     mode: "0775"
     recurse: yes
 

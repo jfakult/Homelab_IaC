@@ -114,13 +114,45 @@
     nas_share_path: /mnt/user/Public
     mount_opts: "{{ bastion_mount_opts }}"
 
+# Must come after the mounts above and before rp-nginx is relied on; the NAS
+# paths are the ones rp-nginx bind-mounts.
+- name: NAS resilience (boot ordering, watchdog, autoheal)
+  import_tasks: ../../misc/tasks/nas_resilience.yml
+  vars:
+    nas_mount_paths: [/srv/www, /srv/nas, /srv/share]
+  tags: nas
 
 
-- name: Install certbot and nginx plugin
+
+# The host's own nginx is not used: nginx runs only as the rp-nginx
+# container, and certbot renews with --webroot. The distro nginx came in as a
+# dependency of python3-certbot-nginx and sat failed (port clash) since
+# 2026-09-16. Stop + mask it, then remove the packages. nginx-common is kept
+# on purpose (no purge/autoremove): /etc/nginx is rendered by this role and
+# bind-mounted into rp-nginx.
+- name: Stop, disable and mask the host nginx service
+  ansible.builtin.systemd:
+    name: nginx.service
+    state: stopped
+    enabled: false
+    masked: true
+  failed_when: false
+  tags: [nginx, certbot]
+
+- name: Remove host nginx and the certbot nginx plugin
   ansible.builtin.apt:
     name:
-      - certbot
+      - nginx
       - python3-certbot-nginx
+    state: absent
+    purge: false
+    autoremove: false
+  become: yes
+  tags: [nginx, certbot]
+
+- name: Install certbot (webroot authenticator only)
+  ansible.builtin.apt:
+    name: certbot
     state: present
     update_cache: yes
   become: yes

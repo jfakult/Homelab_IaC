@@ -49,6 +49,7 @@ resource "proxmox_virtual_environment_vm" "vm" {
   cpu {
     cores   = each.value.cores
     sockets = 1
+    type    = each.value.cpu_type
   }
 
   memory {
@@ -60,6 +61,8 @@ resource "proxmox_virtual_environment_vm" "vm" {
     datastore_id = local.storage_pool
     interface    = "scsi0"
     size         = each.value.disk   # MB
+    discard      = "on"              # pass fstrim through to the thin pool
+    ssd          = true
   }
 
   network_device {

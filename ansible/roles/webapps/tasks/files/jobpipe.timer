@@ -1,0 +1,10 @@
+[Unit]
+Description=Run jobpipe every night at 4am Eastern
+
+[Timer]
+# VM clock is UTC; the explicit zone keeps this at 4am local across DST
+OnCalendar=*-*-* 04:00:00 America/New_York
+Persistent=true
+
+[Install]
+WantedBy=timers.target
