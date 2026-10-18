@@ -6,9 +6,12 @@ covered by `/root/backup/vm-dumps.json`. Each migrated app gets its own role +
 database in `pg_databases` (`inventory/group_vars/infra.yml`); its dump is then
 part of the db VM's `pg_dumpall` and its `sqlite` entry leaves `vm-dumps.json`.
 
-Rules for every migration: one app at a time; keep the old SQLite file until the
-app has run cleanly for a day; the SQLite file is never modified by the switch,
-so rolling back is flipping the setting back and recreating the container.
+Rules for every migration: keep the old SQLite file, its nightly copy
+(`/var/backups/vm-dumps/*.bak`) and any export for as long as the owner says
+(never delete them as part of "cleanup"); the SQLite file is never modified by the
+switch, so rolling back is flipping the setting back and recreating the container.
+Rehearse first on a scratch Postgres (see below); the real move then repeats the
+same commands against pg-main.
 
 ## Pocket-ID (204) - SQLite -> `pocketid` on pg-main
 
@@ -58,3 +61,51 @@ fresh instance shows the first-run setup page, so do steps 4-5 back to back.
 Rollback (any time before step 7): set `pocket_id_use_postgres: false`, redeploy
 sso. The SQLite file in `/opt/pocket-id/data` is untouched and Pocket-ID resumes
 with the data it had at step 3 (changes made after the switch are lost).
+
+
+## Grafana, speedtest-tracker, Open WebUI (monitoring VM 211 and compute 208)
+
+None of these has an official SQLite-to-Postgres tool. Open WebUI's docs say it does
+not migrate data between databases; Grafana's forum recommends letting Grafana create
+the Postgres schema and then loading data only (full pgloader loads fail on type
+differences). That is what `scripts/sqlite_to_pg.py` does, with a value-level check in
+`scripts/compare_sqlite_pg.py`:
+
+1. The app starts once against an EMPTY Postgres database and creates its own schema.
+2. The app is stopped (so nothing writes to either side).
+3. `sqlite_to_pg.py <snapshot.sqlite> <postgres url> --skip <bookkeeping tables>` empties
+   the target tables in one statement, loads every table that exists on both sides with
+   values converted by the Postgres column type (0/1 -> boolean, text -> json), resets
+   the sequences, and refuses to commit unless every row count matches.
+4. `compare_sqlite_pg.py` compares the actual values, not just counts.
+5. The app starts on the copied data.
+
+Tables left to the new database (bookkeeping the app wrote itself on first start):
+speedtest-tracker `migrations`; Grafana `migration_log`, `resource_migration_log`,
+`secret_migration_log`, `server_lock`; Open WebUI `alembic_version`.
+The tools need a superuser connection (they disable foreign-key triggers while loading)
+and `psycopg2`: run them on the db VM, which has it, with the SQLite snapshot copied there.
+
+Rehearsed 2026-10-18 on a throwaway Postgres (same app versions as production:
+speedtest-tracker v1.15.0, Grafana 12.2.1, Open WebUI 0.11.3). All three produced
+identical data. Known harmless differences: rows the rehearsal app wrote itself on
+start (a session, `login_attempt`, a refreshed alert-config timestamp).
+
+Steps for the real move (flags `speedtest_use_postgres`, `grafana_use_postgres` in
+`infra.yml`, `open_webui_use_postgres` in `apps.yml`):
+
+1. Vault keys (letters and digits only): `vault_speedtest_postgres_password`,
+   `vault_grafana_postgres_password`, `vault_open_webui_postgres_password` and
+   `vault_grafana_admin_password` (the Grafana admin password as set in the UI).
+2. `ansible-playbook -i inventory/hosts.ini site.yml --tags db --limit db -J`
+   creates the three roles/databases.
+3. Set the flags to `true`. Deploy and immediately stop the apps so they hold the
+   empty database only briefly:
+   `ansible-playbook -i inventory/hosts.ini site.yml --limit monitoring -J && qm guest exec 211 -- bash -c "cd /opt/monitoring && docker compose stop grafana speedtest-tracker"`
+   `ansible-playbook -i inventory/hosts.ini site.yml --tags chat --limit compute -J && qm guest exec 208 -- bash -c "cd /opt/open-webui && docker compose stop open-webui"`
+   Each app has now created its schema in Postgres and is stopped.
+4. Copy, verify, start (run per app; snapshot with `vzdump-hook.sh --run <vmid>` first).
+5. After a clean day, remove the migrated `sqlite` entries from `/root/backup/vm-dumps.json`
+   (211: both; 208: only `webui.db`, the chroma index stays local) and tick the TODO in
+   `context.md`. The SQLite originals and `.bak` copies stay until the owner says otherwise.
+

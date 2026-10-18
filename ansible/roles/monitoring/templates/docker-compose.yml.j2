@@ -55,7 +55,17 @@ services:
     restart: unless-stopped
     ports: ["3000:3000"]
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: changeme
+      # Only used when Grafana first creates its admin user; afterwards the password lives in its database.
+      # Keep the vault value equal to the one set in the UI so a rebuilt Grafana comes up with it.
+      GF_SECURITY_ADMIN_PASSWORD: "{{ vault_grafana_admin_password }}"
+{% if grafana_use_postgres %}
+      GF_DATABASE_TYPE: postgres
+      GF_DATABASE_HOST: "{{ hostvars['db'].ansible_host }}:5432"
+      GF_DATABASE_NAME: grafana
+      GF_DATABASE_USER: grafana
+      GF_DATABASE_PASSWORD: "{{ vault_grafana_postgres_password }}"
+      GF_DATABASE_SSL_MODE: disable
+{% endif %}
     volumes:
       - /opt/monitoring/grafana:/var/lib/grafana
     networks: [monitoring]
@@ -99,7 +109,16 @@ services:
       APP_KEY: "{{ vault_speedtest_app_key if vault_speedtest_app_key.startswith('base64:') else 'base64:' ~ vault_speedtest_app_key }}"
       APP_URL: "https://speedtest.{{ gateway_domain_root }}"
       ASSET_URL: "https://speedtest.{{ gateway_domain_root }}"
+{% if speedtest_use_postgres %}
+      DB_CONNECTION: pgsql
+      DB_HOST: "{{ hostvars['db'].ansible_host }}"
+      DB_PORT: "5432"
+      DB_DATABASE: speedtest
+      DB_USERNAME: speedtest
+      DB_PASSWORD: "{{ vault_speedtest_postgres_password }}"
+{% else %}
       DB_CONNECTION: sqlite
+{% endif %}
       # cron expression (container TZ); see speedtest_schedule in all/main.yml
       SPEEDTEST_SCHEDULE: "{{ speedtest_schedule }}"
     volumes:

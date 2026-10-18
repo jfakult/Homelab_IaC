@@ -324,7 +324,7 @@
   template:
     src: docker-compose-open-webui.yml.j2
     dest: /opt/open-webui/docker-compose.yml
-    mode: "0644"
+    mode: "0600"   # holds the OIDC client secret and the DB password
   tags: chat
 
 - name: Bring up Open WebUI

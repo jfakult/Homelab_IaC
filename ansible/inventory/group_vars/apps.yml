@@ -104,6 +104,11 @@ open_webui_oidc_client_secret: "{{ vault_open_webui_oidc_client_secret }}"
 # admin UI. Its members get Open WebUI's admin role on every login - see
 # the compute role's Open WebUI compose template for the full mechanism.
 open_webui_admin_group: "admin"
+# Open WebUI database: SQLite file in its data volume (false) or the `openwebui`
+# database on pg-main (true). Flip only as part of docs/postgres-migrations.md.
+# Its vector store (chroma) stays local either way.
+open_webui_use_postgres: false
+open_webui_db_url: "postgresql://openwebui:{{ vault_open_webui_postgres_password }}@{{ hostvars['db'].ansible_host }}:5432/openwebui"
 
 # SearXNG (web search backend for Open WebUI). Generate with `openssl rand
 # -hex 32`.

@@ -453,6 +453,27 @@ there is no Proxmox-level nameserver setting - DNS comes from Ansible.
    AI's API traffic needs DNS). Change one thing, verify, keep a rollback ready.
 5. Commit only when asked; never force-push; don't include secrets.
 6. Give a short summary and the next command; the owner will run deploys.
+7. **Databases live on the db VM (203) whenever the app can use Postgres.** Do not add a
+   SQLite file, a Postgres/MySQL container or a vector DB to an app VM. Instead:
+   - Default: add an entry to `pg_databases` in `ansible/inventory/group_vars/infra.yml`
+     (name, owner, password via a new `vault_*` key, allowed CIDRs). `roles/db` then creates the
+     role + database in `pg-main`, the `pg_hba.conf` line and the UFW rule; point the app at
+     `192.168.1.203:5432` (a connection URL or `DB_*` env vars, per the app).
+   - If the app needs something stock Postgres does not have (extensions such as VectorChord or
+     pgvector, a different major version), run **another Postgres container on the db VM** (own dir
+     under `/opt`, own port, own volume), never on the app VM. The first example is Immich's.
+   - Moving an existing SQLite app over: follow `ansible/docs/postgres-migrations.md` (the app creates
+     the schema on an empty Postgres database, then `scripts/sqlite_to_pg.py` copies the data; rehearse
+     on a scratch Postgres first).
+   - Add the new database to the dump list: it is covered automatically if it is in an existing Postgres
+     container on 203 (`pg_dumpall`); a new container needs its own `postgres` entry in
+     `/root/backup/vm-dumps.json`.
+   - Only when an app genuinely cannot use Postgres (Pi-hole, Jellyfin, the journal's vector store) does
+     its data stay on the app VM. List it as a `sqlite` entry in `vm-dumps.json` so it is backed up, and
+     never put a SQLite file on NFS/NAS.
+   - Postgres never lives on a network share, and the app's own data (media, uploads) may.
+   - **Never delete the original SQLite files, nightly `.bak` copies or export ZIPs of a migrated app**
+     as part of cleanup; they are the rollback. Only the owner decides when they go.
 
 ## 10. Known drift / open items (as of 2026-09-21)
 - Pi-hole `listeningMode=ALL` set live in the container volume, not in Ansible.
@@ -473,6 +494,7 @@ there is no Proxmox-level nameserver setting - DNS comes from Ansible.
 
 ## 10a. TODO (short list)
 - **Pocket-ID leftovers** (after it has run cleanly on Postgres for a day): remove the `204` entry from `/root/backup/vm-dumps.json` (the db VM dump covers it now); delete `/opt/pocket-id/data/pocket-id.db*` and `pre-postgres-export.zip` on the SSO VM, and `/root/backup/pocket-id-pre-postgres/` on butlah (all hold secrets).
+- **SQLite -> Postgres moves still to do** (runbook: `ansible/docs/postgres-migrations.md`): speedtest-tracker and Grafana (monitoring VM), Open WebUI (compute; its chroma vector store stays local). Rehearsed and verified; code is in place behind the `*_use_postgres` flags. Needs four vault keys (see the runbook). Afterwards remove their `sqlite` entries from `vm-dumps.json`.
 - **Monitoring audit:** stale `prometheus_targets` (scrapes .200 for exporters butlah does not run; node exporters missing on media and monitoring), alert rules and Alertmanager routing, Grafana dashboards (Grafana admin password is still `changeme` in the monitoring compose), decide what to alert on for Immich/Postgres/GPU/NAS.
 
 ## 11. Cheat sheet

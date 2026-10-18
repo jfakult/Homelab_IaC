@@ -6,6 +6,12 @@ pocket_id_encryption_key: "{{ vault_pocket_id_encryption_key }}"
 pocket_id_use_postgres: true
 pocket_id_db_url: "postgres://pocketid:{{ vault_pocket_id_postgres_password }}@{{ hostvars['db'].ansible_host }}:5432/pocketid?sslmode=disable"
 
+# Monitoring VM apps: SQLite file (false) or their database on pg-main (true).
+# Flip only as part of the steps in docs/postgres-migrations.md (the app creates
+# its schema on the empty database, then the data is copied over).
+speedtest_use_postgres: false
+grafana_use_postgres: false
+
 # db (203): pg-main, the shared Postgres container. The admin role is created
 # by POSTGRES_USER at first init; every app gets its own role + database from
 # pg_databases, which also drives pg_hba.conf and the UFW allow rules.
@@ -31,6 +37,22 @@ pg_databases:
     password: "{{ vault_pocket_id_postgres_password }}"
     cidrs:
       - 192.168.1.204/32      # sso
+  - name: speedtest
+    owner: speedtest
+    password: "{{ vault_speedtest_postgres_password }}"
+    cidrs:
+      - 192.168.1.211/32      # monitoring
+  - name: grafana
+    owner: grafana
+    password: "{{ vault_grafana_postgres_password }}"
+    cidrs:
+      - 192.168.1.211/32      # monitoring
+  - name: openwebui
+    owner: openwebui
+    # letters and digits only: it is embedded in a URL (open_webui_db_url)
+    password: "{{ vault_open_webui_postgres_password }}"
+    cidrs:
+      - 192.168.1.208/32      # compute
 
 # Bastion (201)
 tls_mode: "mkcert"      # mkcert | letsencrypt

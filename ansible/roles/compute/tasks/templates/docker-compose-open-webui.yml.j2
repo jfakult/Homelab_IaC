@@ -36,6 +36,9 @@ services:
     environment:
       OLLAMA_BASE_URL: "{{ ollama_base_url }}"
       WEBUI_URL: "https://chat.fakult.net"
+{% if open_webui_use_postgres %}
+      DATABASE_URL: "{{ open_webui_db_url }}"
+{% endif %}
       # Displays as "FakChat (Open WebUI)" - Open WebUI's own code
       # (backend/open_webui/env.py) hardcodes appending " (Open WebUI)" to
       # any customized WEBUI_NAME as a license-driven branding requirement,
