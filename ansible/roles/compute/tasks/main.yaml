@@ -140,37 +140,31 @@
   until: _ollama_ready.status == 200
   tags: ollama
 
-- name: Pull Ollama models
+# Pull only what is missing. `ollama pull` on a model that is already present
+# still asks the registry and re-downloads it if the upstream tag has moved
+# (this silently replaced gemma4:e4b with a newer build once), so installed
+# models are skipped. To refresh a model on purpose, pass
+# `-e ollama_force_pull=true` (or `ollama rm` it first).
+- name: List installed Ollama models
+  command: docker exec ollama ollama list
+  register: _ollama_installed
+  changed_when: false
+  tags: ollama
+
+- name: Work out which wanted models are not installed yet
+  set_fact:
+    _ollama_wanted: >-
+      {{ ([ollama_chat_model_base, ollama_embedding_model, ollama_vision_model, ollama_post_processing_model]
+          + (ollama_extra_models | default([])))
+         | unique | map('regex_replace', '^([^:]+)$', '\1:latest') | list }}
+    _ollama_have: "{{ _ollama_installed.stdout_lines[1:] | map('regex_replace', '\\s.*$', '') | list }}"
+  tags: ollama
+
+- name: Pull missing Ollama models
   command: docker exec ollama ollama pull {{ item }}
-  # ollama_chat_model_base (raw upstream tag), not ollama_chat_model (the
-  # locally-built capped variant below) - the capped tag doesn't exist on
-  # any registry, it's built from this pull, not pulled itself.
-  loop: "{{ [ollama_chat_model_base, ollama_embedding_model, ollama_vision_model] + (ollama_extra_models | default([])) }}"
+  loop: "{{ _ollama_wanted if (ollama_force_pull | default(false) | bool) else (_ollama_wanted | difference(_ollama_have)) }}"
   register: _ollama_pull
-  changed_when: "'success' in _ollama_pull.stdout or 'up to date' in _ollama_pull.stdout" # noqa
-  tags: ollama
-
-# --- Runaway-generation ceiling ---
-# See apps.yml's ollama_chat_model comment for the full incident history.
-# Builds a second local tag layered on the raw pull with a hard
-# num_predict ceiling baked in, so every consumer (blinko-journal chat +
-# post-processing, Open WebUI) is protected without passing per-request
-# options - single source of truth, same pattern as the model-pin vars.
-- name: Template capped-generation Modelfile
-  template:
-    src: chat-model-capped.Modelfile.j2
-    dest: /opt/ollama/chat-model-capped.Modelfile
-    mode: "0644"
-  tags: ollama
-
-- name: Copy capped-generation Modelfile into the Ollama container
-  command: docker cp /opt/ollama/chat-model-capped.Modelfile ollama:/tmp/chat-model-capped.Modelfile
-  tags: ollama
-
-- name: Build capped-generation model variant
-  command: docker exec ollama ollama create {{ ollama_chat_model }} -f /tmp/chat-model-capped.Modelfile
-  register: _ollama_capped_build
-  changed_when: "'success' in _ollama_capped_build.stdout"
+  changed_when: "'success' in _ollama_pull.stdout"
   tags: ollama
 
 # --- Whisper (speaches) ---
@@ -201,6 +195,12 @@
 # Docker+NVIDIA has a well-known failure mode: a container's GPU cgroup
 # device access is bound to the dockerd process instance it started under,
 # so any Docker daemon restart (host reboot, `apt upgrade`, unattended-
+# upgrades, ansible's own nvidia-ctk-triggered restart above) leaves
+# already-running GPU containers unable to see the GPU
+# ("Failed to initialize NVML: Unknown Error" from inside the container)
+# until they're recreated - `docker restart` alone does NOT fix this, only
+# a full recreate does. This makes that automatic instead of something
+# that has to be caught and fixed by hand after the fact.
 - name: Drop GPU heal helper (finds GPU containers; used by the recreate unit and the health check)
   template:
     src: gpu-heal.sh.j2
@@ -208,12 +208,6 @@
     mode: "0755"
   tags: [ollama, whisper, gpu]
 
-# upgrades, ansible's own nvidia-ctk-triggered restart above) leaves
-# already-running GPU containers unable to see the GPU
-# ("Failed to initialize NVML: Unknown Error" from inside the container)
-# until they're recreated - `docker restart` alone does NOT fix this, only
-# a full recreate does. This makes that automatic instead of something
-# that has to be caught and fixed by hand after the fact.
 - name: Drop GPU-containers-recreate systemd unit
   template:
     src: gpu-containers-recreate.service.j2
