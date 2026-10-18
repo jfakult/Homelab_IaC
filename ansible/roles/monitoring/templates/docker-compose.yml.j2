@@ -45,6 +45,8 @@ services:
       RELAYHOST_USERNAME: "{{ smtp_relay_username }}"
       RELAYHOST_PASSWORD: "{{ vault_smtp_relay_password }}"
       ALLOWED_SENDER_DOMAINS: "{{ smtp_relay_username.split('@')[1] }}"
+    # LAN-only listener for non-compose senders (Unraid notifications)
+    ports: ["192.168.1.211:25:25"]
     networks: [monitoring]
 
   grafana:
