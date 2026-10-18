@@ -25,14 +25,14 @@ FAILS_FILE="$STATE_DIR/fails"
 SINCE=$(cat "$SINCE_FILE" 2>/dev/null || date -u -d '{{ gpu_health_check_interval_minutes }} minutes ago' +%Y-%m-%dT%H:%M:%S)
 date -u +%Y-%m-%dT%H:%M:%S > "$SINCE_FILE"
 
-if ! docker logs --since "$SINCE" ollama 2>&1 | grep -q 'failed to initialize CUDA'; then
+if BAD=$(/usr/local/sbin/gpu-heal.sh check "$SINCE"); then
   echo 0 > "$FAILS_FILE"
   exit 0
 fi
 
 FAILS=$(( $(cat "$FAILS_FILE" 2>/dev/null || echo 0) + 1 ))
 echo "$FAILS" > "$FAILS_FILE"
-logger -t gpu-health-check "ollama lost GPU access (CUDA init failure seen in logs, consecutive failure #$FAILS) - recreating GPU containers"
+logger -t gpu-health-check "GPU access lost (consecutive failure #$FAILS): $(echo "$BAD" | tr '\n' ';') - recreating GPU containers"
 systemctl restart gpu-containers-recreate.service
 
 if [ "$FAILS" -ge {{ gpu_health_check_max_fails }} ]; then

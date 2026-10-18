@@ -43,7 +43,7 @@
 # also needs refreshing after a deliberate driver upgrade, which this
 # covers for free since that always involves a reboot.
 [Unit]
-Description=Recreate GPU containers (ollama, whisper) after Docker or containerd starts
+Description=Recreate every GPU container (found by gpu-heal.sh) after Docker or containerd starts
 After=docker.service containerd.service
 Requires=docker.service
 # PartOf (not just After/Requires) is what makes this re-run every time
@@ -57,8 +57,9 @@ PartOf=docker.service containerd.service
 Type=oneshot
 RemainAfterExit=yes
 ExecStartPre=/usr/bin/nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
-ExecStart=/usr/bin/docker compose -f /opt/ollama/docker-compose.yml up -d --force-recreate
-ExecStart=/usr/bin/docker compose -f /opt/whisper/docker-compose.yml up -d --force-recreate
+# gpu-heal.sh finds the GPU containers itself (NVIDIA device request / nvidia runtime),
+# so a new GPU service is covered without editing this unit.
+ExecStart=/usr/local/sbin/gpu-heal.sh recreate
 
 [Install]
 WantedBy=multi-user.target

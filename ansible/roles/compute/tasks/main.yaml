@@ -201,6 +201,13 @@
 # Docker+NVIDIA has a well-known failure mode: a container's GPU cgroup
 # device access is bound to the dockerd process instance it started under,
 # so any Docker daemon restart (host reboot, `apt upgrade`, unattended-
+- name: Drop GPU heal helper (finds GPU containers; used by the recreate unit and the health check)
+  template:
+    src: gpu-heal.sh.j2
+    dest: /usr/local/sbin/gpu-heal.sh
+    mode: "0755"
+  tags: [ollama, whisper, gpu]
+
 # upgrades, ansible's own nvidia-ctk-triggered restart above) leaves
 # already-running GPU containers unable to see the GPU
 # ("Failed to initialize NVML: Unknown Error" from inside the container)
@@ -213,13 +220,13 @@
     dest: /etc/systemd/system/gpu-containers-recreate.service
     mode: "0644"
   register: _gpu_recreate_unit
-  tags: [ollama, whisper]
+  tags: [ollama, whisper, gpu]
 
 - name: Reload systemd units
   systemd:
     daemon_reload: true
   when: _gpu_recreate_unit is changed
-  tags: [ollama, whisper]
+  tags: [ollama, whisper, gpu]
 
 - name: Enable + run GPU-containers-recreate unit now
   # state: started (not just enabled) so a from-scratch run of this role is
@@ -230,7 +237,7 @@
     name: gpu-containers-recreate.service
     enabled: true
     state: started
-  tags: [ollama, whisper]
+  tags: [ollama, whisper, gpu]
 
 # --- Active GPU health watchdog ---
 # Covers the failure class gpu-containers-recreate.service can't see: GPU
@@ -247,7 +254,7 @@
     src: gpu-health-check.sh.j2
     dest: /usr/local/bin/gpu-health-check.sh
     mode: "0755"
-  tags: [ollama, whisper]
+  tags: [ollama, whisper, gpu]
 
 - name: Drop GPU health-check systemd unit + timer
   template:
@@ -258,20 +265,20 @@
     - gpu-health-check.service.j2
     - gpu-health-check.timer.j2
   register: _gpu_health_check_units
-  tags: [ollama, whisper]
+  tags: [ollama, whisper, gpu]
 
 - name: Reload systemd units (health-check)
   systemd:
     daemon_reload: true
   when: _gpu_health_check_units is changed
-  tags: [ollama, whisper]
+  tags: [ollama, whisper, gpu]
 
 - name: Enable + start GPU health-check timer
   systemd:
     name: gpu-health-check.timer
     enabled: true
     state: started
-  tags: [ollama, whisper]
+  tags: [ollama, whisper, gpu]
 
 # --- GPU capacity sanity check (informational, not a hard gate - see
 # docs/workstreams/02-whisper-service.md in blinko-journal for what to
