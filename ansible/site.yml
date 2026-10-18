@@ -61,13 +61,16 @@
     - media
   tags: tested
 
-- name: Provision blinko-journal database
+- name: Configure pg-main (Postgres) and its app databases
   hosts: db
   become: true
   become_method: sudo
-  tasks:
-    - import_tasks: roles/db/tasks/provision_blinko.yml
+  pre_tasks:
+    - import_tasks: roles/misc/tasks/docker_daemon_defaults.yml
+  roles:
+    - db
   tags:
+    - db
     - journal
 
 - name: Configure Webapps Server

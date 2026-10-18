@@ -4,13 +4,13 @@ services:
     container_name: pg-main
     restart: unless-stopped
     environment:
-      POSTGRES_USER: "{{ pg_user_authentik }}"
-      POSTGRES_PASSWORD: "{{ pg_password_authentik }}"
-      POSTGRES_DB: "{{ pg_db_authentik }}"
+      POSTGRES_USER: "{{ pg_admin_user }}"
+      POSTGRES_PASSWORD: "{{ pg_admin_password }}"
+      POSTGRES_DB: "{{ pg_admin_db }}"
     volumes:
       - {{ pg_db_dir }}:/var/lib/postgresql/data
       - {{ pg_backups_dir }}:/backups
-      - /opt/postgres/conf:/etc/postgresql/conf
+      - {{ pg_dir }}/conf:/etc/postgresql/conf
       - /etc/hosts:/etc/hosts:ro
       - /etc/resolv.conf:/etc/resolv.conf:ro
     command: >
@@ -18,7 +18,7 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL","pg_isready -U {{ pg_user_authentik }} -d {{ pg_db_authentik }}"]
+      test: ["CMD-SHELL","pg_isready -U {{ pg_admin_user }} -d {{ pg_admin_db }}"]
       interval: 10s
       timeout: 5s
       retries: 6

@@ -1,3 +1,15 @@
+# pg-main: the shared Postgres container on the db VM. Each app gets its own
+# role + database from `pg_databases` (inventory/group_vars/infra.yml); the
+# pg_hba.conf lines and UFW rules are derived from the same list.
+
+- name: Install DB client + driver
+  apt:
+    name:
+      - postgresql-client
+      - python3-psycopg2
+    state: present
+    update_cache: true
+
 - name: Create dirs
   file:
     path: "{{ item }}"
@@ -6,66 +18,84 @@
     group: 999
     mode: "0750"
   loop:
-    - "{{ pg_db_dir }}"
+    - "{{ pg_dir }}"
     - "{{ pg_backups_dir }}"
-    - "/opt/postgres/conf"
-    - "/opt/postgres"
+    - "{{ pg_dir }}/conf"
 
-- name: Drop configs
+- name: Drop postgresql.conf
   template:
     src: postgresql.conf.j2
-    dest: /opt/postgres/conf/postgresql.conf
+    dest: "{{ pg_dir }}/conf/postgresql.conf"
     mode: "0644"
 
 - name: Drop pg_hba.conf
   template:
     src: pg_hba.conf.j2
-    dest: /opt/postgres/conf/pg_hba.conf
+    dest: "{{ pg_dir }}/conf/pg_hba.conf"
     mode: "0644"
+  register: _pg_hba
 
 - name: Drop compose
   template:
     src: docker-compose.yml.j2
-    dest: /opt/postgres/docker-compose.yml
-    mode: "0644"
+    dest: "{{ pg_dir }}/docker-compose.yml"
+    mode: "0600"
 
 - name: Up Postgres
-  shell: docker compose up -d
-  args: { chdir: /opt/postgres }
-
-- name: Wait for postgres TCP
-  wait_for:
-    port: 5432
-    delay: 0
-    timeout: 120
+  command: docker compose up -d
+  args:
+    chdir: "{{ pg_dir }}"
+  register: _pg_up
+  changed_when: "'Recreated' in _pg_up.stderr or 'Created' in _pg_up.stderr or 'Started' in _pg_up.stderr"
 
 - name: Wait for Postgres ready
-  shell: docker exec pg-main pg_isready -U {{ pg_user_authentik }}
-  register: pg
-  until: pg.rc == 0
-  retries: 5
+  command: docker exec pg-main pg_isready -U {{ pg_admin_user }}
+  register: _pg_ready
+  until: _pg_ready.rc == 0
+  retries: 15
   delay: 2
   changed_when: false
 
-- name: Install DB client + driver
-  apt:
-    name:
-      - postgresql-client
-      - python3-psycopg2
-    state: present
-    update_cache: yes
+# -h 127.0.0.1 matters: over the container's unix socket psql matches a
+# different pg_hba.conf line ("local all all peer") and the reload can fail.
+- name: Reload Postgres config (picks up pg_hba.conf changes, no restart)
+  command: >
+    docker exec -e PGPASSWORD={{ pg_admin_password | quote }} pg-main
+    psql -h 127.0.0.1 -U {{ pg_admin_user }} -d {{ pg_admin_db }} -c "SELECT pg_reload_conf();"
+  when: _pg_hba is changed
+  no_log: true
 
-- name: Ensure authentik database exists
-  community.postgresql.postgresql_db:
-    name: "{{ pg_db_authentik }}"
-    state: present
-    login_user: "{{ pg_user_authentik }}"
-    login_password: "{{ pg_password_authentik }}"
-    login_host: "127.0.0.1"
+- name: Ensure app roles exist
+  community.postgresql.postgresql_user:
+    name: "{{ item.owner }}"
+    password: "{{ item.password }}"
+    login_host: 127.0.0.1
+    login_user: "{{ pg_admin_user }}"
+    login_password: "{{ pg_admin_password }}"
+    login_db: "{{ pg_admin_db }}"
     port: 5432
-    ssl_mode: prefer
+    state: present
+  loop: "{{ pg_databases }}"
+  loop_control:
+    label: "{{ item.owner }}"
+  no_log: true
 
-# Optional: UFW firewall
+- name: Ensure app databases exist
+  community.postgresql.postgresql_db:
+    name: "{{ item.name }}"
+    owner: "{{ item.owner }}"
+    login_host: 127.0.0.1
+    login_user: "{{ pg_admin_user }}"
+    login_password: "{{ pg_admin_password }}"
+    maintenance_db: "{{ pg_admin_db }}"
+    port: 5432
+    state: present
+  loop: "{{ pg_databases }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+
+# --- UFW ---------------------------------------------------------------
 - name: Ensure ufw is present
   package: { name: ufw, state: present }
 
@@ -82,18 +112,19 @@
     proto: tcp
     src: "192.168.0.0/16"
 
+- name: Allow Postgres from each app's sources
+  ufw:
+    rule: allow
+    port: "5432"
+    proto: tcp
+    src: "{{ item | regex_replace('/32$', '') }}"
+  loop: "{{ pg_databases | map(attribute='cidrs') | flatten | unique | list }}"
 
-- name: Allow Postgres only from SSO
+- name: Remove the Postgres allow rule for the SSO VM (re-added per app via pg_databases)
   ufw:
     rule: allow
     port: "5432"
     proto: tcp
     src: "192.168.1.204"
-
-# Simple nightly dump
-#- name: Cron pg_dump
-#  copy:
-#    dest: /etc/cron.d/pg_dumps
-#    mode: "0644"
-#    content: |
-#      15 2 * * * root docker exec pg-main pg_dump -U {{ pg_user_authentik }} {{ pg_db_authentik }} > {{ pg_backups_dir }}/authentik-$(date +\%F).sql 2>>/var/log/pg_dump.err
+    delete: true
+  when: "'192.168.1.204/32' not in (pg_databases | map(attribute='cidrs') | flatten | list)"
