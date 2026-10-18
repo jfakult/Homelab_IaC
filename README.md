@@ -24,7 +24,7 @@
 | SSO | ID = 04 | Pocket-ID (OIDC) | For auth gateway |
 | Webapps | ID = 05 | Node, FastAPI, static apps | Needs app-dashboard (SUI/Heimdall/Homepage) |
 | Media | ID = 06 | Jellyfin | Metadata local SSD, media on NAS |
-| Storage | ID = 07 | Immich, Paperless, Nextcloud | Heavy NAS usage |
+| Storage | ID = 07 | Deprecated (powered off) | Immich, Paperless and Nextcloud run on Webapps instead |
 | Compute | ID = 08 | AI GPU workloads | LLM, coding assistant, image gen |
 | Containerlab | ID = 09 | FRR/EVPN/MPLS labs | For network engineering experiments |
 | Misc | ID = 10 | Scratchpad, experiments | Catch-all |

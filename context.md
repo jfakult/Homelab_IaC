@@ -26,7 +26,7 @@ Internet -> router (80/443/2222 only, per README) -> bastion (nginx reverse prox
 All VMs live on one Proxmox host ("butlah") on 192.168.1.0/24, all joined to Tailscale.
 ```
 
-- One physical Proxmox host, **butlah** (192.168.1.200, `butlah.fakult.net`), 11 Ubuntu 24.04 VMs.
+- One physical Proxmox host, **butlah** (192.168.1.200, `butlah.fakult.net`), 11 Ubuntu 24.04 VMs (10 running; `storage` is deprecated and powered off).
 - The Claude/AI session and the human both work **on butlah as root**, in
   `/root/IaC` (the git repo). butlah is the Ansible control node *and* the
   hypervisor. Editing is often via VS Code Remote-SSH.
@@ -77,7 +77,7 @@ IP:port table below rather than public URLs when debugging.
 
 Inventory: `ansible/inventory/hosts.ini` (**gitignored**, exists only on butlah).
 Groups: `external` (bastion), `infra` (dns, db, sso, monitoring), `apps`
-(webapps, media, storage, compute), `lab` (containerlab, misc).
+(webapps, media, compute), `lab` (containerlab, misc).
 
 | VMID/host | IP | Runs (Compose project dir) | Notes |
 |---|---|---|---|
@@ -88,7 +88,7 @@ Groups: `external` (bastion), `infra` (dns, db, sso, monitoring), `apps`
 | 204 sso | .204 | `pocket-id` (/opt/pocket-id), port 1411 | OIDC provider for everything. Database: the `pocketid` database on `pg-main` (`pocket_id_use_postgres: true`, migrated 2026-10-18 with Pocket-ID's own `export`/`import`; steps and the import pitfall in `ansible/docs/postgres-migrations.md`). `/opt/pocket-id/data` still holds the old `pocket-id.db` (rollback copy), the uploaded images, and `pre-postgres-export.zip` until they are cleaned up. Policy: every database that supports Postgres lives on the db VM; SQLite-only apps (Pi-hole, Jellyfin, the journal's vector store) stay local and are listed in `/root/backup/vm-dumps.json`. |
 | 205 webapps | .205 | `blinko-website` (/opt/journal, :1111), `kiwix` (/opt/kiwix), `geo-proxy` (/opt/geo-proxy, :8091) | The AI journal. Image `ghcr.io/jfakult/blinko-journal:latest` built by GitHub Actions in the *separate* `jfakult/blinko-journal` repo. NAS mounts `/srv/www`, `/srv/nas`. `geo-proxy` is a reverse-geocoding proxy, LAN/Tailscale-only (not on a bastion subdomain). Also runs the non-Docker `webapp-*` systemd apps (resume etc., section 7.5). |
 | 206 media | .206 | `jellyfin` (:8096) + exporters (/opt/jellyfin) | Media on NAS via NFS. Jellyfin SSO plugin uses Pocket-ID. |
-| 207 storage | .207 | nothing (no Docker; role empty) | Placeholder. |
+| 207 storage | .207 | nothing | **Deprecated.** Was meant for Immich/Paperless/Nextcloud; those run on webapps (Postgres on the db VM). Powered off, autoboot off, 1 core / 512 MB, tagged `deprecated` in Proxmox (`started = false`, `on_boot = false` in `terraform.tfvars`); removed from the Ansible inventory; its disk (32 GB) and IP are kept. Delete the VM in Terraform to reclaim the disk. |
 | 208 compute | .208 | `ollama` (:11434), `whisper` (:8000), `open-webui` (:3000), `searxng` (:8888) | RTX 4060 Ti 16GB passed through (hostpci0), 32GB RAM, 256GB disk. See section 7. |
 | 209 containerlab | .209 | nothing | Placeholder. |
 | 210 misc | .210 | nothing | Scratchpad. |

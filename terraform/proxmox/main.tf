@@ -27,6 +27,9 @@ resource "proxmox_virtual_environment_vm" "vm" {
   node_name   = local.node_name
   name        = each.key
   description = each.value.purpose
+  started     = each.value.started
+  on_boot     = each.value.on_boot
+  tags        = each.value.tags
 
   initialization {
     user_data_file_id = "local:snippets/cloud-init.yaml" # /var/lib/vz/snippets

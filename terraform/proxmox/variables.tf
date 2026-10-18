@@ -25,5 +25,8 @@ variable "vms" {
     balloon = optional(number, 768)  # template default = 768 MB
     disk    = optional(number, 10)    # template default = 10 GB
     cpu_type = optional(string, "qemu64") # template default; compute uses "host"
+    started  = optional(bool, true)       # false = VM is powered off (e.g. deprecated VMs)
+    on_boot  = optional(bool, true)       # start with the Proxmox host
+    tags     = optional(list(string))     # null keeps the tags inherited from the template
   }))
 }
