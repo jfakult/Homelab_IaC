@@ -9,6 +9,21 @@
     - "{{ dns_base }}/etc-pihole"
     - "{{ dns_base }}/etc-dnsmasq.d"
 
+# Files the compose stack needs. Rendered BEFORE anything below disconnects
+# Nord or rewrites resolv.conf, so a failure here leaves DNS untouched.
+- name: Ensure env dir for the compose stack
+  file:
+    path: "{{ dns_base }}/env"
+    state: directory
+    mode: "0700"
+
+- name: Render pihole_exporter env
+  template:
+    src: pihole_exporter.env.j2
+    dest: "{{ dns_base }}/env/pihole_exporter.env"
+    mode: "0600"
+  no_log: true
+
 - name: Deploy Pi-hole upstream DNS config
   template:
     src: pihole_dnsmasq.conf.j2
