@@ -12,6 +12,10 @@ subdomains:
   - name: chat
     upstream_host: "{{ hostvars['compute'].ansible_host }}"
     upstream_port: 3000
+  - name: speedtest
+    upstream_host: "{{ hostvars['monitoring'].ansible_host }}"
+    upstream_port: 3030
+    aliases: [quality]       # optional: extra paths that redirect to the subdomain
 ```
 
 That one entry is the only thing you should ever need to hand-write. It
@@ -22,6 +26,8 @@ drives three things automatically:
 | `roles/dns/templates/static-hosts.conf.j2` | Internal LAN resolution (`<name>.fakult.net` → `bastion`, 192.168.1.201) |
 | `roles/bastion/tasks/render_subdomains.yml` | Renders `/etc/nginx/conf.d/subdomains/<name>.fakult.net.conf` (a full nginx vhost: HTTP→HTTPS redirect, `/.well-known/acme-challenge/` handling, and the proxy to `upstream_host:upstream_port`) |
 | `roles/bastion/tasks/main.yml`'s certbot loop | Issues `<name>.fakult.net` its own Let's Encrypt cert (`certbot certonly --cert-name <name>.fakult.net`) |
+
+Optional `aliases` add more paths that redirect the same way (`fakult.net/quality` and `/quality/...` → `speedtest.fakult.net`).
 
 It also gets you a `fakult.net/<name>` → `https://<name>.fakult.net` redirect
 for free (`roles/bastion/templates/subdomain-redirects.conf.j2`), so people

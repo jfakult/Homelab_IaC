@@ -18,6 +18,19 @@
     - prometheus
     - prometheus-data
 
+- name: Create speedtest-tracker and smokeping directories (linuxserver images run as uid 1000)
+  file:
+    path: "{{ monitoring_dir }}/{{ item }}"
+    state: directory
+    owner: 1000
+    group: 1000
+    mode: '0755'
+  loop:
+    - speedtest-tracker
+    - smokeping
+    - smokeping/config
+    - smokeping/data
+
 - name: Generate configs
   template:
     src: "{{ item.src }}"
@@ -28,6 +41,7 @@
     force: yes
   with_filetree: "templates/monitoring/"
   when: item.state == 'file'
+  register: _monitoring_configs
 
 - name: Fix Prometheus data directory permissions
   file:
@@ -71,3 +85,10 @@
   command: docker compose up -d
   args:
     chdir: "{{ monitoring_dir }}"
+
+# A changed bind-mounted config file does not recreate the container.
+- name: Restart smokeping when its config changed
+  command: docker compose restart smokeping
+  args:
+    chdir: "{{ monitoring_dir }}"
+  when: _monitoring_configs.results | selectattr('changed') | map(attribute='item.path') | select('match', '^smokeping/') | list | length > 0

@@ -80,3 +80,53 @@ services:
     volumes:
       - /opt/monitoring/blackbox/blackbox.yml:/etc/blackbox_exporter/blackbox.yml:ro
     networks: [monitoring]
+
+  # Internet speed history. Web UI on :3030, served publicly at
+  # speedtest.{{ gateway_domain_root }} through the bastion (the `speedtest` entry in
+  # `subdomains`). SQLite DB lives in /opt/monitoring/speedtest-tracker.
+  # APP_KEY encrypts data stored in that DB: it must stay the same value
+  # across redeploys (vault_speedtest_app_key).
+  speedtest-tracker:
+    image: lscr.io/linuxserver/speedtest-tracker:latest
+    container_name: speedtest-tracker
+    restart: unless-stopped
+    ports: ["3030:80"]
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "{{ tz }}"
+      # Laravel needs the "base64:" prefix to decode the key; add it if the vault value is the bare key.
+      APP_KEY: "{{ vault_speedtest_app_key if vault_speedtest_app_key.startswith('base64:') else 'base64:' ~ vault_speedtest_app_key }}"
+      APP_URL: "https://speedtest.{{ gateway_domain_root }}"
+      ASSET_URL: "https://speedtest.{{ gateway_domain_root }}"
+      DB_CONNECTION: sqlite
+      # cron expression (container TZ); see speedtest_schedule in all/main.yml
+      SPEEDTEST_SCHEDULE: "{{ speedtest_schedule }}"
+    volumes:
+      - /opt/monitoring/speedtest-tracker:/config
+    networks: [monitoring]
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Latency graphs to a few internet targets. LAN + Tailscale only (no bastion
+  # route): http://monitoring.yak-anoles.ts.net:3031/smokeping/ . Targets and
+  # General are rendered from templates/monitoring/smokeping/config/.
+  smokeping:
+    image: lscr.io/linuxserver/smokeping:latest
+    container_name: smokeping
+    restart: unless-stopped
+    ports: ["3031:80"]
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "{{ tz }}"
+    volumes:
+      - /opt/monitoring/smokeping/config:/config
+      - /opt/monitoring/smokeping/data:/data
+    networks: [monitoring]
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,0 +1,18 @@
+*** Targets ***
+
+probe = FPing
+
+menu = Top
+title = Network Latency Monitoring
+remark = Internet Quality Monitoring
+
++ InternetQuality
+menu = Internet Quality
+title = Internet Quality
+{% for t in smokeping_targets %}
+
+++ {{ t.id }}
+menu = {{ t.menu }}
+title = {{ t.title }}
+host = {{ t.host }}
+{% endfor %}

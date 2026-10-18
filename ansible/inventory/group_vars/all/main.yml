@@ -31,6 +31,10 @@ subdomains:
   - name: chat
     upstream_host: "{{ hostvars['compute'].ansible_host }}"
     upstream_port: 3000
+  - name: speedtest
+    upstream_host: "{{ hostvars['monitoring'].ansible_host }}"
+    upstream_port: 3030
+    aliases: [quality]       # fakult.net/quality and /quality/... also redirect here
 
 media_mount_opts:   "rw,hard,nconnect=8,vers=4.2,noatime,rsize=1048576,wsize=1048576,noauto,x-systemd.automount,_netdev,nofail,mount-timeout=10s,x-systemd.idle-timeout=20"
 webapps_mount_opts: "rw,hard,nconnect=8,vers=4.2,noatime,rsize=1048576,wsize=1048576,noauto,x-systemd.automount,_netdev,nofail"
@@ -85,3 +89,22 @@ geo_proxy_contact_email: "{{ smtp_relay_username }}"
 # block in its compose file (which always wins).
 docker_log_max_size: "10m"
 docker_log_max_file: 3
+
+# Tailnet name: services that are LAN/Tailscale-only are reached at
+# <inventory-name>.<tailnet_domain>.
+tailnet_domain: "yak-anoles.ts.net"
+
+# smokeping (monitoring VM, http://monitoring.<tailnet_domain>:3031/smokeping/).
+# Each target becomes a graph; keep `id` stable, it names the data on disk.
+smokeping_owner: "fakult"
+smokeping_contact: "root@localhost"
+smokeping_targets:
+  - { id: Google,       menu: "Google DNS",     title: "Google DNS (8.8.8.8)",      host: "8.8.8.8" }
+  - { id: Cloudflare,   menu: "Cloudflare DNS", title: "Cloudflare DNS (1.1.1.1)",  host: "1.1.1.1" }
+  - { id: SanFrancisco, menu: "San Francisco",  title: "Cloudflare SFO",            host: "198.41.214.162" }
+  - { id: NewYork,      menu: "New York",       title: "Cloudflare EWR",            host: "198.41.192.47" }
+  - { id: Ashburn,      menu: "Ashburn VA",     title: "Cloudflare IAD",            host: "198.41.200.13" }
+
+# speedtest-tracker (monitoring VM): how often it runs a test, as a cron
+# expression in the container's timezone. Every 6 hours.
+speedtest_schedule: "0 */6 * * *"
