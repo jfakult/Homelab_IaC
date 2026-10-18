@@ -79,3 +79,9 @@ prometheus_targets:
 # `prometheus_targets` on purpose: LAN + Tailscale only, no bastion route.
 geo_proxy_port: 8091
 geo_proxy_contact_email: "{{ smtp_relay_username }}"
+
+# Docker log defaults for every host (roles/misc/tasks/docker_daemon_defaults.yml).
+# Override per host in host_vars/<host>.yml, or per container with a `logging:`
+# block in its compose file (which always wins).
+docker_log_max_size: "10m"
+docker_log_max_file: 3

@@ -1,0 +1,68 @@
+# Applies the Docker log defaults (roles/misc/tasks/docker_daemon_defaults.yml)
+# to containers that already exist: restarts Docker so it re-reads
+# daemon.json, then recreates every compose project on the host so each
+# container is created under the new defaults. Containers not managed by
+# compose are listed and left alone.
+#
+# DISRUPTIVE: every container on the host restarts (bastion = public ingress
+# for ~30 s, db = every database client). Run one host at a time, in a quiet
+# window, and always with --limit:
+#
+#   ansible-playbook -i inventory/hosts.ini docker_logs_apply.yml --limit webapps -J
+#
+# compute: its gpu-containers-recreate.service also fires on the Docker
+# restart; this play recreates ollama/whisper again afterwards, which is
+# harmless. Verify the GPU after (`curl localhost:11434/api/ps`, size_vram > 0).
+- name: Apply Docker log defaults to existing containers
+  hosts: all:!localhost
+  become: true
+  become_method: sudo
+  gather_facts: false
+  serial: 1
+  pre_tasks:
+    - name: Refuse to run without --limit
+      assert:
+        that: ansible_limit is defined
+        fail_msg: "Pass --limit <host>. This restarts every container on the host."
+      run_once: true
+      delegate_to: localhost
+  tasks:
+    - name: Check daemon.json already has the log defaults
+      command: grep -q '"max-size"' /etc/docker/daemon.json
+      changed_when: false
+
+    - name: List compose projects and standalone containers
+      shell: |
+        {% raw %}docker ps -a --format '{{.Names}}|{{.Label "com.docker.compose.project.working_dir"}}|{{.Label "com.docker.compose.project.config_files"}}'{% endraw %}
+      register: _containers
+      changed_when: false
+
+    - name: Show standalone (non-compose) containers that will only be restarted by Docker
+      debug:
+        msg: "{{ _containers.stdout_lines | select('match', '^[^|]+\\|\\|') | list }}"
+
+    - name: Restart Docker
+      service:
+        name: docker
+        state: restarted
+
+    - name: Wait for Docker
+      command: docker info
+      register: _docker_up
+      until: _docker_up.rc == 0
+      retries: 15
+      delay: 2
+      changed_when: false
+
+    - name: Recreate each compose project under the new defaults
+      shell: >
+        docker compose --project-directory {{ item.split('|')[0] | quote }}
+        -f {{ item.split('|')[1].split(',')[0] | quote }}
+        up -d --force-recreate
+      loop: >-
+        {{ _containers.stdout_lines
+           | reject('match', '^[^|]+\|\|')
+           | map('regex_replace', '^[^|]+\|', '')
+           | unique | list }}
+      loop_control:
+        label: "{{ item.split('|')[0] }}"

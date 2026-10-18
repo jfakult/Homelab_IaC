@@ -1,0 +1,57 @@
+# Host-wide Docker log defaults: json-file with a size cap, so no container
+# can fill a VM disk with logs. MERGES into any existing /etc/docker/daemon.json
+# (e.g. compute's nvidia runtime block, written by `nvidia-ctk`): every key
+# other than log-driver and the two log-opts below is left untouched.
+#
+# Does NOT restart Docker. Docker reads daemon.json only at start, and a
+# container only picks up the default when it is (re)created, so the new
+# values reach existing containers via docker_logs_apply.yml (run per host, in
+# a quiet window).
+#
+# Per-container tuning: a `logging:` block in a service's compose file
+# always wins over these defaults:
+#   logging:
+#     options: { max-size: "50m", max-file: "5" }
+# Per-host tuning: set docker_log_max_size / docker_log_max_file in
+# host_vars/<host>.yml.
+
+- name: Ensure /etc/docker exists
+  file:
+    path: /etc/docker
+    state: directory
+    mode: "0755"
+
+- name: Read the existing daemon.json
+  slurp:
+    src: /etc/docker/daemon.json
+  register: _daemon_json_raw
+  failed_when: false
+
+- name: Compute the merged daemon.json
+  set_fact:
+    _daemon_json_current: "{{ ((_daemon_json_raw.content | default('e30=') | b64decode | trim) or '{}') | from_json }}"
+- set_fact:
+    _daemon_json_merged: >-
+      {{ _daemon_json_current | combine({
+           'log-driver': 'json-file',
+           'log-opts': (_daemon_json_current['log-opts'] | default({})) | combine({
+             'max-size': docker_log_max_size,
+             'max-file': docker_log_max_file | string
+           })
+         }) }}
+
+- name: Keep a copy of the original daemon.json (once)
+  copy:
+    src: /etc/docker/daemon.json
+    dest: /etc/docker/daemon.json.pre-ansible
+    remote_src: true
+    force: false
+    mode: "0644"
+  when: _daemon_json_raw.content is defined
+
+- name: Write daemon.json (only if it changed)
+  copy:
+    content: "{{ _daemon_json_merged | to_nice_json(indent=4) }}\n"
+    dest: /etc/docker/daemon.json
+    mode: "0644"
+  when: _daemon_json_merged != _daemon_json_current

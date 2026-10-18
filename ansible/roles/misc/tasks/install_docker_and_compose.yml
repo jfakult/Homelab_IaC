@@ -51,3 +51,6 @@
     name: docker
     enabled: true
     state: started
+
+- name: Set host-wide Docker log defaults (merged into daemon.json, no restart)
+  import_tasks: docker_daemon_defaults.yml
