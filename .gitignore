@@ -1,8 +1,12 @@
 pki-out/
-*.conf.j2
 *.conf.butlah*
-*.env*
-snippets/*.j2
+# Real env files hold secrets and are never tracked. Their templates (*.env.j2,
+# *.conf.j2, snippets/*.j2) ARE tracked: they must only reference vault variables.
+.env
+*.env
+# Contains a literal Jellyfin API key. Move it to the vault (JELLYFIN_API_KEY={{ vault_... }}),
+# then delete this line and track the file.
+ansible/roles/media/templates/jellyfin_exporter.env.j2
 
 # === Terraform ===
 # Local .terraform directories

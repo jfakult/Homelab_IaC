@@ -1,0 +1,15 @@
+location /journal {
+    allow all;
+  
+    proxy_pass http://{{ hostvars['webapps'].ansible_host }}:1111;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+}
+
+location /thoughts {
+    allow all;
+  
+    return 301 /journal;
+}

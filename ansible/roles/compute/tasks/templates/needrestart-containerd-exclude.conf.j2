@@ -1,0 +1,16 @@
+# Ansible-managed. Exclude containerd from needrestart's automatic restart.
+# Ubuntu's stock /etc/needrestart/needrestart.conf already excludes
+# `^docker` (docker.service/docker.socket) from auto-restart via
+# $nrconf{override_rc}, but not containerd - so a routine unattended-
+# upgrades security patch touching any shared library containerd links
+# (confirmed live 2026-09-11: libc6) gets it auto-restarted, which silently
+# breaks GPU device-cgroup access for already-running ollama/whisper
+# containers (same mechanism as a docker.service restart, one layer down).
+# This closes that gap the same way docker.service is already protected.
+# Same trade-off as the nvidia-package unattended-upgrades blacklist:
+# containerd runs on a stale libc until deliberately restarted (apt upgrade
+# + this role's gpu-containers-recreate self-heal handles the GPU side).
+# Modify the existing hashref in place (don't reassign $nrconf{override_rc}
+# to a new hash literal) so the base config's own exclusions - docker,
+# dbus, NetworkManager, etc. - stay intact.
+$nrconf{override_rc}{qr(^containerd)} = 0;

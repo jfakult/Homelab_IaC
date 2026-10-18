@@ -1,0 +1,26 @@
+# AUTO-GENERATED from the `subdomains` list (inventory/group_vars/all/main.yml).
+# Included inside the main {{ domain_name }} vhost (nginx.conf.j2) so e.g.
+# fakult.net/chat bounces to chat.fakult.net instead of 404ing. Do not
+# hand-edit - see docs/subdomains.md.
+{% for sd in subdomains %}
+location = /{{ sd.name }} {
+  allow all;
+  # Deliberately NOT $request_uri - that would preserve the /{{ sd.name }}
+  # path onto the new domain (e.g. /chat -> chat.fakult.net/chat), which
+  # 404s because the app has no route at that path; it only exists as a
+  # path on THIS domain. Redirect to the subdomain's root instead
+  # (preserving any query string, since that's often meaningful).
+  return 301 https://{{ sd.name }}.{{ domain_name }}/$is_args$args;
+}
+{% for alias in sd.aliases | default([]) %}
+# Alias: an old/alternative path for the same service.
+location = /{{ alias }} {
+  allow all;
+  return 301 https://{{ sd.name }}.{{ domain_name }}/$is_args$args;
+}
+location ^~ /{{ alias }}/ {
+  allow all;
+  return 301 https://{{ sd.name }}.{{ domain_name }}/$is_args$args;
+}
+{% endfor %}
+{% endfor %}

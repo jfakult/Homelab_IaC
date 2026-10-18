@@ -1,0 +1,61 @@
+# AUTO-GENERATED per entry in the `subdomains` list
+# (inventory/group_vars/all/main.yml) by roles/bastion/tasks/render_subdomains.yml.
+# Do not hand-edit on the host - edit the `subdomains` list and re-run the
+# bastion play instead. See docs/subdomains.md.
+#
+# Rendered twice per play: once before the cert exists (HTTP-only, so
+# certbot's webroot challenge has something to hit) and once after
+# (activates the HTTPS block). `cert_exists` is set by render_subdomains.yml
+# from a `stat` check, not guessed.
+
+upstream {{ subdomain.name }}_upstream {
+    server {{ subdomain.upstream_host }}:{{ subdomain.upstream_port }};
+    keepalive 10;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {{ subdomain.name }}.{{ domain_name }};
+
+    location ^~ /.well-known/acme-challenge/ {
+        default_type "text/plain";
+        root /usr/share/nginx/letsencrypt;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+{% if cert_exists %}
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name {{ subdomain.name }}.{{ domain_name }};
+
+    ssl_certificate     /etc/letsencrypt/live/{{ subdomain.name }}.{{ domain_name }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ subdomain.name }}.{{ domain_name }}/privkey.pem;
+
+    add_header Strict-Transport-Security "max-age=63072000" always;
+
+    location / {
+        proxy_pass http://{{ subdomain.name }}_upstream;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        # Streaming/chat-style responses (Open WebUI, etc.) need websocket
+        # upgrade support - harmless for backends that don't use it.
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+    }
+}
+{% else %}
+# HTTPS block not rendered yet - {{ subdomain.name }}.{{ domain_name }}'s
+# cert doesn't exist. Run the bastion play's `certbot` tag to obtain it,
+# then the `nginx` tag again to activate HTTPS (both happen automatically,
+# in that order, in a normal full run - see docs/subdomains.md).
+{% endif %}
