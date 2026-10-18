@@ -38,6 +38,8 @@ def canon(v, t, from_sqlite):
         return str(int(v) if not isinstance(v, str) else int(v.strip().lower() in ('1', 't', 'true')))
     if t.startswith('timestamp') or t == 'date':
         s = v.isoformat(sep=' ') if hasattr(v, 'isoformat') else str(v)
+        if re.match(r'^\d{4}-\d\d-\d\d$', s):      # SQLite keeps a bare date; Postgres a midnight timestamp
+            s += ' 00:00:00'
         return s[:19] if DT.match(s) else s
     if isinstance(v, (float, decimal.Decimal)):
         return repr(round(float(v), 6))
