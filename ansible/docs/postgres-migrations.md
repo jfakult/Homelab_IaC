@@ -91,6 +91,10 @@ speedtest-tracker v1.15.0, Grafana 12.2.1, Open WebUI 0.11.3). All three produce
 identical data. Known harmless differences: rows the rehearsal app wrote itself on
 start (a session, `login_attempt`, a refreshed alert-config timestamp).
 
+Done 2026-10-18: Pocket-ID, speedtest-tracker, Grafana and Open WebUI are on pg-main; the copies were
+verified value-by-value and the pre-migration SQLite snapshots are kept in
+`/root/backup/pre-postgres-migrations/` (plus the originals and nightly `.bak` files on the VMs).
+
 Steps for the real move (flags `speedtest_use_postgres`, `grafana_use_postgres` in
 `infra.yml`, `open_webui_use_postgres` in `apps.yml`):
 

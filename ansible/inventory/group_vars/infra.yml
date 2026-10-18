@@ -9,8 +9,8 @@ pocket_id_db_url: "postgres://pocketid:{{ vault_pocket_id_postgres_password }}@{
 # Monitoring VM apps: SQLite file (false) or their database on pg-main (true).
 # Flip only as part of the steps in docs/postgres-migrations.md (the app creates
 # its schema on the empty database, then the data is copied over).
-speedtest_use_postgres: false
-grafana_use_postgres: false
+speedtest_use_postgres: true
+grafana_use_postgres: true
 
 # db (203): pg-main, the shared Postgres container. The admin role is created
 # by POSTGRES_USER at first init; every app gets its own role + database from
