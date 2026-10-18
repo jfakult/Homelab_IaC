@@ -1,5 +1,11 @@
 # sso (204):
 pocket_id_encryption_key: "{{ vault_pocket_id_encryption_key }}"
+# Pocket-ID database: SQLite file on the VM (false) or the `pocketid` database
+# on pg-main (true). Flip only as part of the steps in docs/postgres-migrations.md
+# (the data has to be exported and imported around the switch).
+pocket_id_use_postgres: true
+pocket_id_db_url: "postgres://pocketid:{{ vault_pocket_id_postgres_password }}@{{ hostvars['db'].ansible_host }}:5432/pocketid?sslmode=disable"
+
 # db (203): pg-main, the shared Postgres container. The admin role is created
 # by POSTGRES_USER at first init; every app gets its own role + database from
 # pg_databases, which also drives pg_hba.conf and the UFW allow rules.
@@ -19,6 +25,12 @@ pg_databases:
     cidrs:
       - 192.168.1.205/32      # webapps
       - 100.64.0.0/10         # Tailscale: ad-hoc DB client access
+  - name: pocketid
+    owner: pocketid
+    # letters and digits only: it is embedded in a URL (pocket_id_db_url)
+    password: "{{ vault_pocket_id_postgres_password }}"
+    cidrs:
+      - 192.168.1.204/32      # sso
 
 # Bastion (201)
 tls_mode: "mkcert"      # mkcert | letsencrypt

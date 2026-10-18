@@ -10,7 +10,7 @@
   template:
     src: docker-compose.yml.j2
     dest: "{{ pocket_id_compose_dir }}/docker-compose.yml"
-    mode: "0644"
+    mode: "0600"   # holds the encryption key and the DB password
 
 - name: Up Pocket ID
   shell: docker compose up -d

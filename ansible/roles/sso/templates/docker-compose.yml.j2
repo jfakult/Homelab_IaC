@@ -7,6 +7,9 @@ services:
       APP_URL: "https://{{ sso_fqdn }}"
       TRUST_PROXY: "true"
       ENCRYPTION_KEY: "{{ pocket_id_encryption_key }}"
+{% if pocket_id_use_postgres %}
+      DB_CONNECTION_STRING: "{{ pocket_id_db_url }}"
+{% endif %}
       PORT: "1411"
       PUID: "1000"
       PGID: "1000"
