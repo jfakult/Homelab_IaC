@@ -21,7 +21,7 @@
 | Bastion / Jump (Reverse Proxy) | ID = 01 | Ingress only (80,443,2222), Nginx reverse proxy, Fail2ban | External facing |
 | DNS | ID = 02 | Internal only | Pi-hole |
 | DB | ID = 03 | Data on NAS | Postgres |
-| SSO | ID = 04 | Authelia + dependencies | For auth gateway |
+| SSO | ID = 04 | Pocket-ID (OIDC) | For auth gateway |
 | Webapps | ID = 05 | Node, FastAPI, static apps | Needs app-dashboard (SUI/Heimdall/Homepage) |
 | Media | ID = 06 | Jellyfin | Metadata local SSD, media on NAS |
 | Storage | ID = 07 | Immich, Paperless, Nextcloud | Heavy NAS usage |
@@ -72,7 +72,7 @@ Organize into **roles**, then combine in `site.yml`.
     
 *   **DB role**: Postgres (external volume on NAS)
     
-*   **SSO role**: Authelia, integrated with proxy
+*   **SSO role**: Pocket-ID (OIDC), behind the proxy
     
 *   **Webapps role**:
     

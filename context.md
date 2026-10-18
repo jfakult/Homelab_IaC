@@ -7,8 +7,7 @@ traps that have already bitten us. Written 2026-09-21; things marked
 comes from the repo's config. **The repo and the live system win over this
 file** - if they disagree, trust them and fix this doc.
 
-`README.md` is the original design blueprint and is partly stale (it says
-Authelia; SSO is Pocket-ID now). This file supersedes it for "how things work today".
+`README.md` is the original design blueprint and is partly stale. This file supersedes it for "how things work today".
 `ansible/docs/subdomains.md` is the walkthrough for adding a `<name>.fakult.net` service.
 
 ---
@@ -85,15 +84,15 @@ Groups: `external` (bastion), `infra` (dns, db, sso, monitoring), `apps`
 | butlah (Proxmox) | .200 | no exporters (**verified live**: nothing on 9100/9113/8080) | **Not in ansible inventory.** `/etc/resolv.conf` lists 192.168.1.202 first (hand-managed). |
 | 201 bastion | .201 | `rp-nginx` (/opt/gateway), certbot, cadvisor, exporters | Only public-facing VM. TLS termination + reverse proxy. nginx exists **only** as the container: the distro `nginx` package and `python3-certbot-nginx` were removed 2026-10-14 (certbot renews via `--webroot`); `nginx.service` is masked. `nginx-common` stays - it owns `/etc/nginx`, which rp-nginx bind-mounts. |
 | 202 dns | .202 | `dns-pihole-1`, `dns-unbound-1` (/opt/dns), NordVPN client | Pi-hole web at `http://192.168.1.202/admin`. |
-| 203 db | .203 | `pg-main` postgres:16 (/opt/postgres) | Legacy Authentik DB + `blinko` DB for the journal. Only `provision_blinko.yml` is wired into `site.yml`. Superuser role is **`authentik`** (there is no `postgres` role). |
-| 204 sso | .204 | `pocket-id` (/opt/pocket-id), port 1411 | OIDC provider for everything. |
-| 205 webapps | .205 | `blinko-website` (/opt/journal, :1111), `kiwix` (/opt/kiwix), `geo-proxy` (/opt/geo-proxy, :8091) | The AI journal. Image `ghcr.io/jfakult/blinko-journal:latest` built by GitHub Actions in the *separate* `jfakult/blinko-journal` repo. NAS mounts `/srv/www`, `/srv/nas`. `geo-proxy` is a reverse-geocoding proxy, LAN/Tailscale-only (not on a bastion subdomain). Also runs the legacy non-Docker `webapp-*` systemd apps (resume etc., section 7.5). |
+| 203 db | .203 | `pg-main` postgres:16 (/opt/postgres) | **One container** (`pg-main` is the container name, not a DB or role) holding one database per app (**verified live** 2026-10-18): `blinko` (journal, owned by role `blinko`) plus the default `postgres`/templates. Admin (superuser) role: **`butlah`**. Pocket-ID uses SQLite (`/opt/pocket-id/data/pocket-id.db`). `roles/db` (`tasks/main.yml`, tags `db`/`journal`) manages the container, `pg_hba.conf`, UFW and one role+DB per entry of `pg_databases` in `group_vars/infra.yml`; to add an app, add an entry (name, owner, password, allowed CIDRs). Images other than stock Postgres (e.g. Immich's VectorChord build) get their own container. |
+| 204 sso | .204 | `pocket-id` (/opt/pocket-id), port 1411 | OIDC provider for everything. Database: the `pocketid` database on `pg-main` (`pocket_id_use_postgres: true`, migrated 2026-10-18 with Pocket-ID's own `export`/`import`; steps and the import pitfall in `ansible/docs/postgres-migrations.md`). `/opt/pocket-id/data` still holds the old `pocket-id.db` (rollback copy), the uploaded images, and `pre-postgres-export.zip` until they are cleaned up. Policy: every database that supports Postgres lives on the db VM; SQLite-only apps (Pi-hole, Jellyfin, the journal's vector store) stay local and are listed in `/root/backup/vm-dumps.json`. |
+| 205 webapps | .205 | `blinko-website` (/opt/journal, :1111), `kiwix` (/opt/kiwix), `geo-proxy` (/opt/geo-proxy, :8091) | The AI journal. Image `ghcr.io/jfakult/blinko-journal:latest` built by GitHub Actions in the *separate* `jfakult/blinko-journal` repo. NAS mounts `/srv/www`, `/srv/nas`. `geo-proxy` is a reverse-geocoding proxy, LAN/Tailscale-only (not on a bastion subdomain). Also runs the non-Docker `webapp-*` systemd apps (resume etc., section 7.5). |
 | 206 media | .206 | `jellyfin` (:8096) + exporters (/opt/jellyfin) | Media on NAS via NFS. Jellyfin SSO plugin uses Pocket-ID. |
 | 207 storage | .207 | nothing (no Docker; role empty) | Placeholder. |
 | 208 compute | .208 | `ollama` (:11434), `whisper` (:8000), `open-webui` (:3000), `searxng` (:8888) | RTX 4060 Ti 16GB passed through (hostpci0), 32GB RAM, 256GB disk. See section 7. |
 | 209 containerlab | .209 | nothing | Placeholder. |
 | 210 misc | .210 | nothing | Scratchpad. |
-| 211 monitoring | .211 | prometheus :9090, grafana :3000, loki :3100, alertmanager :9093, blackbox :9115, smokeping, speedtest-tracker, `postfix-relay` (/opt/monitoring) | See section 7. |
+| 211 monitoring | .211 | prometheus :9090, grafana :3000, loki :3100, alertmanager :9093, blackbox :9115, `postfix-relay`, `speedtest-tracker` :3030, `smokeping` :3031 (all in /opt/monitoring) | speedtest-tracker is public at `speedtest.fakult.net` (the `speedtest` entry in `subdomains`; `fakult.net/speedtest` and `/quality` redirect there), protected by its own login. smokeping has no login and no bastion route: LAN/Tailscale only at `http://monitoring.yak-anoles.ts.net:3031/smokeping/`. Both are defined in the monitoring compose template; speedtest's `APP_KEY` is `vault_speedtest_app_key` and must stay the same value (it encrypts data in its DB; the "base64:" prefix is added if missing). Smokeping's `Targets`/`General` are rendered from `smokeping_targets` in `all/main.yml`. See section 7
 | NAS | .199 | Unraid (NFS 4.2 shares under `/mnt/user/...`) | Separate physical box, not managed here. |
 
 ## 4. Network, DNS, TLS, SSO
@@ -105,9 +104,13 @@ VMs / butlah  ->  Pi-hole (192.168.1.202, dns VM, docker *host* network)
 ```
 - **Every VM's `/etc/resolv.conf`** is pushed by the `base` role from
   `roles/misc/templates/resolv.conf`: `192.168.1.202`, then `9.9.9.9`, `1.1.1.1`, `8.8.8.8`.
-  Static records come from `roles/dns/templates/static-hosts.conf.j2`:
-  `address=/fakult.net/192.168.1.201` (bare domain + any unlisted subdomain -> bastion),
-  each VM as `<name>.fakult.net`, and one line per entry in the `subdomains` list.
+  Local records (**verified live** 2026-10-18): Pi-hole is v6 and ignores `/etc/dnsmasq.d`
+  (`misc.etc_dnsmasq_d = false`), so `/opt/dns/etc-dnsmasq.d/10-static.conf` has no effect and
+  `roles/dns/templates/static-hosts.conf.j2` is not rendered by the role. What actually answers
+  is `dns.hosts` in the container's `/etc/pihole/pihole.toml` (hand-edited, **not in Ansible**):
+  `sso.fakult.net` and bare `fakult.net` -> bastion, plus the `/etc/hosts` bind-mount for VM
+  short names. Subdomains such as `chat.` and `speedtest.` are not listed, so inside the LAN
+  they resolve through the public record to the home public IP (hairpin NAT through the router).
 - **Tailscale must not manage DNS on VMs.** Tailscale's `accept-dns` defaults on and
   will overwrite `/etc/resolv.conf` ("generated by tailscale") with `100.100.100.100`
   (MagicDNS), which forwards nothing useful here. The `base` role runs
@@ -202,7 +205,7 @@ ansible/
   docs/subdomains.md
 ```
 - **`site.yml` order**: `base` (all hosts; tags `base`,`tested`) -> `local_pki` (localhost)
-  -> sso -> bastion -> dns -> media -> db (**tag `journal`**, only `provision_blinko.yml`)
+  -> sso -> bastion -> dns -> media -> db (**tags `db`, `journal`**)
   -> webapps -> compute -> monitoring. The webapps/compute/monitoring plays
   themselves are untagged.
 - **Targeting**: `--limit <host>` for one VM; `--tags` for slices. Tags in use:
@@ -291,25 +294,34 @@ ansible/
 
 ### 7.3 AI stack (compute)
 - Model pins live in `inventory/group_vars/apps.yml` (single source of truth for
-  both compute and webapps): `ollama_chat_model_base` -> the served chat model is
-  `<base>-safe`, a local Modelfile build with a hard `num_predict` cap
-  (`roles/compute/tasks/templates/chat-model-capped.Modelfile.j2`). Reason: an
-  uncapped qwen3.5:9b generation ran 40k+ tokens for ~2 hours (Ollama's default
-  `num_predict` is unbounded). Also `ollama_post_processing_model`,
-  `ollama_embedding_model`, `ollama_vision_model`. Ollama env: `OLLAMA_CONTEXT_LENGTH`,
-  `OLLAMA_MAX_LOADED_MODELS`, `OLLAMA_KEEP_ALIVE` in the ollama compose template.
+  both compose roles and webapps): `ollama_chat_model_base` / `ollama_chat_model` (chat,
+  currently `gemma4:e4b`), `ollama_post_processing_model` (`qwen3:1.7b`, also Open WebUI's Local
+  Task Model), `ollama_embedding_model` (`nomic-embed-text`), `ollama_vision_model` (`llava`),
+  plus `ollama_extra_models` (empty; add a line to try another). The compute play pulls only
+  models that are **not already installed** (`ollama list`), so a moved upstream tag is never
+  re-downloaded silently; refresh one on purpose with `-e ollama_force_pull=true`. There is no
+  `num_predict` cap: Ollama's default is unbounded, and an uncapped qwen3.5:9b generation once
+  ran 40k+ tokens for ~2 hours (see "Killing a runaway Ollama generation" below).
+  Ollama env: `OLLAMA_CONTEXT_LENGTH`, `OLLAMA_MAX_LOADED_MODELS`, `OLLAMA_KEEP_ALIVE` in the
+  ollama compose template. Whisper: `Systran/faster-whisper-medium` only.
 - VRAM is the real constraint (16GB shared with Whisper): e.g. gemma4:e4b is 9.6GB on
   disk despite its "small" name. Raising `MAX_LOADED_MODELS` doesn't help if VRAM
   can't hold the models; Ollama will evict.
 - **GPU self-healing** (all in the compute role): GPU access silently breaks (CPU
   fallback, no error) when dockerd *or containerd* restarts, when the NVIDIA CDI
   spec `/etc/cdi/nvidia.yaml` is missing/stale, or when the driver/kernel module
-  versions mismatch. Guards: `gpu-containers-recreate.service` (regenerates the CDI
-  spec and force-recreates ollama+whisper whenever docker/containerd restart),
-  `gpu-health-check` timer (watches Ollama logs for CUDA init failure, self-heals,
-  reboots after repeated failures), NVIDIA packages blacklisted from
+  versions mismatch. Guards, all built on `/usr/local/sbin/gpu-heal.sh`, which finds
+  **every GPU container automatically** (any container with an NVIDIA device request
+  or the nvidia runtime; no labels, no per-service lists), so a new GPU service is
+  covered by just using `deploy.resources.reservations.devices: driver: nvidia` in its compose:
+  `gpu-containers-recreate.service` (regenerates the CDI spec and runs `gpu-heal.sh recreate`,
+  a `--force-recreate --no-deps` of each GPU compose service, whenever docker/containerd
+  restart), and the `gpu-health-check` timer (`gpu-heal.sh check`: `nvidia-smi` probe inside
+  each GPU container plus a log scan for CUDA/NVML failure signatures; self-heals, reboots
+  after repeated failures). Also: NVIDIA packages blacklisted from
   unattended-upgrades, `needrestart` told not to bounce containerd. Check GPU use with
-  `curl localhost:11434/api/ps` (`size_vram` must be > 0) and `nvidia-smi`.
+  `curl localhost:11434/api/ps` (`size_vram` must be > 0), `nvidia-smi`, and
+  `gpu-heal.sh list|check`.
   A plain `docker restart` of a GPU container after a daemon restart does **not** fix it; recreate.
 - Killing a runaway Ollama generation: `ollama stop` only updates bookkeeping.
   Find the `llama-server` PID with `docker top ollama` and `kill -9` it **on the VM**
@@ -331,12 +343,19 @@ ansible/
   (loki crash-looped 5 weeks on wrong ownership + missing `compactor.working_directory`
   + missing `ingester.wal.dir`). Prometheus scrape targets are the
   `prometheus_targets` map in `all/main.yml`.
-- Docker `json-file` logs are uncapped on the older monitoring containers; a crash
-  loop filled a 10GB disk (disk was grown to 32GB). Use `logging.options`
-  `max-size`/`max-file` in compose.
+- Docker log size is capped host-wide: `roles/misc/tasks/docker_daemon_defaults.yml`
+  merges `log-driver: json-file` and `log-opts` (`docker_log_max_size`/`docker_log_max_file`
+  in `all/main.yml`, 10m x 3) into each host's `/etc/docker/daemon.json`, keeping any other
+  keys (compute's nvidia runtime). It never restarts Docker. A crash loop once filled the
+  monitoring VM's 10GB disk with uncapped logs.
+  - Defaults only reach a container when it is (re)created after Docker has re-read the
+    file: run `ansible-playbook -i inventory/hosts.ini docker_logs_apply.yml --limit <host> -J`
+    (restarts Docker, recreates every compose project; one host at a time, `--limit` required).
+  - Tune one host: set the vars in `host_vars/<host>.yml`. Tune one container: a `logging:`
+    block in its compose file always wins over the daemon default.
 - Alertmanager treats missing SMTP config as **fatal** at startup (it crash-loops silently).
 
-### 7.5 Legacy webapps (webapps VM, systemd, `webappctl`)
+### 7.5 Non-Docker webapps (webapps VM, systemd, `webappctl`)
 - Non-Docker apps (resume, sunset, link_shortener, hugo, ...) live on the VM's
   **local disk** in `/srv/webapps/<app>/`, each with `start.sh` and `stop.sh`.
   They are not in git or Ansible; apps are added by hand.
@@ -353,7 +372,7 @@ ansible/
   `/srv/www` is bastion's static web root, so `nginx.conf.j2` returns 404 for
   `^~ /_webapps`. Deploy: `--tags webapps-sync` (webapps) and
   `--tags nginx --limit bastion`.
-- Bastion's own `/srv/webapps` is a stale migration leftover and is unused.
+- Bastion's own `/srv/webapps` is unused.
   11 of the 19 units are in restart loops (for example, `stocks`:
   `su: user butlah does not exist`). `webapp-archive` is bogus: the scan picks
   up its own `archive/` folder.
@@ -368,8 +387,8 @@ ansible/
 - `/opt/kiwix`, served at `fakult.net/wikipedia` (:3090). Zims are on the NAS
   under `/srv/nas/kiwix/zim` and `/srv/www/kiwix/zim`. The container binds the
   share **roots** read-only (`/mnt/nas`, `/mnt/www`) and rebuilds
-  `/tmp/library.xml` on every start. The old `library.xml` in
-  `/srv/www/kiwix/zim` is no longer used.
+  `/tmp/library.xml` on every start. `library.xml` in
+  `/srv/www/kiwix/zim` is ignored.
 - Why the share roots: Unraid (`shfs`, `fuse_remember`) drops NFS handles.
   The host re-resolves paths and recovers, but a bind of a NAS *subdirectory*
   stays `Stale file handle` / "error 116 opening file" until the container
@@ -437,6 +456,7 @@ there is no Proxmox-level nameserver setting - DNS comes from Ansible.
 
 ## 10. Known drift / open items (as of 2026-09-21)
 - Pi-hole `listeningMode=ALL` set live in the container volume, not in Ansible.
+- Pi-hole `dns.hosts` (local DNS records) is hand-edited in `pihole.toml`, not in Ansible; new `subdomains` entries do not get a local record (see 4.1). Declaring them with `FTLCONF_dns_hosts` in the dns compose file would fix both.
 - `/etc/systemd/resolved.conf.d/fallback-dns.conf` created live on monitoring (harmless).
 - Uncommitted work in the tree: FakChat branding, loki config fixes, base-role
   DNS/tailscale fix, postfix-relay + alertmanager SMTP config, vault update.
@@ -450,6 +470,10 @@ there is no Proxmox-level nameserver setting - DNS comes from Ansible.
 - The dns role calls NordVPN + `tailscale set --accept-dns=false`; changing that role
   risks the DNS VM's own resolution - test carefully.
 - Tailscale admin console still has the Pi-hole global nameserver entry; override is OFF.
+
+## 10a. TODO (short list)
+- **Pocket-ID leftovers** (after it has run cleanly on Postgres for a day): remove the `204` entry from `/root/backup/vm-dumps.json` (the db VM dump covers it now); delete `/opt/pocket-id/data/pocket-id.db*` and `pre-postgres-export.zip` on the SSO VM, and `/root/backup/pocket-id-pre-postgres/` on butlah (all hold secrets).
+- **Monitoring audit:** stale `prometheus_targets` (scrapes .200 for exporters butlah does not run; node exporters missing on media and monitoring), alert rules and Alertmanager routing, Grafana dashboards (Grafana admin password is still `changeme` in the monitoring compose), decide what to alert on for Immich/Postgres/GPU/NAS.
 
 ## 11. Cheat sheet
 ```
@@ -474,70 +498,126 @@ ansible-playbook -i inventory/hosts.ini site.yml --tags nginx,certbot --limit ba
 
 ## 12. Backups and restore (built 2026-10-15, **verified live** 2026-10-16)
 
-Full procedures: `/root/backup/RESTORE-RUNBOOK.md`. Scripts live in **`/root/backup`** on butlah
-(not in this repo: they back up the whole host, not just IaC; not committed). Everything is
-systemd timers (root), no cron. Each script has `-h`, `--estimate` (dry run) and `--watch`
-(follows its journal), writes `/var/lib/<name>/{last_success,last_summary,last_failure,backoff_until}`
-and backs off 15m -> 1h -> 4h -> 6h after a failure. restic repos use an empty password
-(`restic --insecure-no-password -r <repo> ...`).
+### 12.1 In plain words
+- **Every night at 02:00 Proxmox backs up all VM disks to PBS.** PBS is a VM that runs on the Unraid box and stores the backups on an Unraid array disk. Only changed data is sent, so it takes about 2 minutes.
+- **Just before each VM is snapshotted, a hook makes a fresh copy of that VM's databases** (Postgres, SQLite) inside the VM, so the snapshot has a clean copy and not only a "pulled the plug" one.
+- **Once a day, butlah backs up its own config and Unraid's config** with restic. The Proxmox config goes to the Unraid NAS share; the Unraid config is pulled to butlah and mirrored to the share.
+- **An hourly watchdog emails you** if something is stale or failing.
+- **Your laptop** pulls the config copies from the NAS share (12.5).
+- Everything is started by **butlah**: the Proxmox scheduler (02:00 VM job) and three systemd timers. Nothing runs by itself on the VMs or on Unraid (Unraid only answers butlah's read-only SSH requests). No cron.
 
-| What | How | Where it ends up | When |
+All scripts live in **`/root/backup` on butlah** (not in this repo: they cover the whole host, not just IaC; not committed). Units are in `/etc/systemd/system`. **What gets dumped is declared in `/root/backup/vm-dumps.json`** (one entry per VMID: `sqlite` files and `postgres` containers; `"enabled": false` skips one). Add a database there, run `lib/gen_vm_dump.py --check`, then `vzdump-hook.sh --run <vmid>`; no script editing. Every script has `-h`, `--estimate` (dry run) and `--watch` (follows its journal). Each writes `/var/lib/<name>/{last_success,last_summary,last_failure,backoff_until}`; after a failure it waits 15 min, then 1 h, 4 h, 6 h before trying again. restic repos have an empty password (`restic --insecure-no-password -r <repo> ...`).
+
+### 12.2 Diagrams
+
+**A. VM disks and database dumps (02:00 every night)**
+```
+  INVOKER: Proxmox job scheduler, 02:00 daily  (job backup-c87aa9a6-b031, all guests, one after another)
+      |
+      v
+ +-- BUTLAH (Proxmox host, 192.168.1.200) ------------------------------------------------------+
+ |   vzdump  --- before each VM ---> /root/backup/vzdump-hook.sh   (set by "script:" in          |
+ |                                       |                          /etc/vzdump.conf)           |
+ |                                       | qm guest exec <vmid>    (QEMU guest agent, host->VM) |
+ +---------------------------------------|------------------------------------------------------+
+                                         v   sends a script generated from vm-dumps.json into the VM
+ +-- THE VM (only 202 203 204 205 206 208 211 have a dump) -------------------------------------+
+ |   runs as root inside the VM:                                                                 |
+ |     203 db:   docker exec pg-main pg_dumpall | gzip   (keeps newest 3)                       |
+ |     others:   SQLite online copy (python3 sqlite3 backup API) -> one rolling <name>.bak       |
+ |                  |                                                                            |
+ |                  +--> /var/backups/vm-dumps/   (on the VM's own disk)                         |
+ +---------------------------------------|------------------------------------------------------+
+                                         v   vzdump freezes the VM filesystem and snapshots the disk
+ butlah ====== changed disk blocks over the LAN (1 Gbps) ======> PBS VM 192.168.1.198
+                                                                  (a VM on the Unraid box)
+                                                      datastore "pbs_backup" = vdisk on array disk3
+                                                      PBS prunes old snapshots on its own schedule
+```
+If a dump fails the hook sends an alert and the VM backup carries on (the hook always exits 0).
+
+**B. Config backups (systemd timers on butlah, due about once a day after 03:00)**
+```
+  INVOKER: systemd timers on butlah, wake every 15 min, the script decides if a run is due
+  host-config-backup.timer   --> host-config-backup.service   --> /root/backup/host-config-backup.sh --if-due
+  unraid-config-backup.timer --> unraid-config-backup.service --> /root/backup/unraid-config-backup.sh --if-due
+
+ host-config-backup.sh  (runs on butlah)                    unraid-config-backup.sh  (runs on butlah)
+ 1 copy /etc/pve, network, cron, units, /root,              1 ssh to Unraid with the READ-ONLY key
+   IaC, SSH keys, package lists -> staging folder              Unraid runs ONLY backup-gate.sh:
+ 2 mount Unraid NFS share "Backup" (for this run only)          rsync-read of /boot/config,
+ 3 restic backup  --> Backup/Butlah/proxmox-config              plugin list, VM definitions
+ 4 tarball        --> Backup/Butlah/proxmox-config-tarballs/ 2 files land in /var/lib/unraid-config-backup/mirror
+                      and /srv/backup/export/                3 restic backup --> /srv/backup/unraid-config  (butlah)
+ 5 restic copy    --> /srv/backup/proxmox-config (butlah)   4 tarball --> /srv/backup/export/ and share
+ 6 unmount the share                                         5 mount share, restic copy --> Backup/Butlah/unraid-config,
+                                                               unmount
+```
+
+**C. Where the copies end up**
+```
+        BUTLAH (.200)                     UNRAID NAS (.199)                         LAPTOP (Framework)
+   /srv/backup/                      +-- array --------------------------+
+    |- proxmox-config  (restic)      |  PBS VM (.198) + its datastore    |      ~/bin/restic/restic_backup.sh
+    |- unraid-config   (restic)      |  share  Backup/                   |       |- backs up the laptop
+    |- export/                       |    |- Butlah/                     |       |     --> Backup/Framework
+    |    *-latest.tar.gz, SHA256SUMS |    |    |- proxmox-config  (restic)  <-- written by butlah (diagram B)
+    '- (nothing else)                |    |    |- unraid-config   (restic)  <-- written by butlah (diagram B)
+                                     |    |    |- *-tarballs/            |  '- pulls from the NAS share
+                                     |    |    '- pbs-vdisk/ (PBS data)   |        Backup/{unraid_appdata,
+                                     |    '- Framework/  (laptop backups) |         unraid_config, proxmox_config}
+                                     +-----------------------------------+        (see 12.5: names differ)
+
+   ALERTS:  scripts on butlah --POST--> Alertmanager (VM 211, :9093) --> postfix-relay --> Gmail --> you
+```
+
+### 12.3 Who calls what
+
+| Invoker | What it starts | Runs on | What it does |
 |---|---|---|---|
-| All 11 VM disks + template 9000 | PVE job `backup-c87aa9a6-b031` (snapshot, zstd, guest agent fs-freeze) | PBS on Unraid: VM "Proxmox Backup Server (PBS)", 192.168.1.198, datastore `pbs_backup` (a vdisk on `/mnt/disk3/Backup/Butlah/pbs-vdisk/`, array, 1 TB). PVE storage `pbs`, user `pve@pbs` | 02:00 daily (~2 min incremental). **Retention is PBS-side** (PVE storage is `keep-all`): 7 daily / 4 weekly / 6 monthly |
-| Databases | `vzdump-hook.sh` (`script:` in `/etc/vzdump.conf`), `backup-start` phase, runs `vm-dumps/<vmid>.sh` in the guest via the agent | `/var/backups/vm-dumps/` **inside each VM**, so it rides in the PBS snapshot. 203: `pg_dumpall` dated, newest 3 kept. SQLite (202 gravity, 204 pocket-id, 205 embeddings, 206 jellyfin, 208 webui+chroma, 211 grafana+speedtest): one rolling `.bak` via sqlite's backup API | Just before each VM's snapshot. Always exits 0: a failed dump alerts but never fails the VM backup |
-| Proxmox host config | `host-config-backup.sh` (+ `host-config-include.txt` / `-exclude.txt`): staged `cp -a` of `/etc/pve`, network, fstab, hosts, cron, systemd units, `/var/lib/vz/snippets`, tailscale state, `/root` (incl. IaC with gitignored hosts.ini/tfstate/tfvars, SSH keys), package lists, qm/pvesm/pvesh listings | restic repo `Backup/Butlah/proxmox-config` on Unraid (NFS mounted only for the run), local mirror `/srv/backup/proxmox-config`, dated + latest tarballs in `Backup/Butlah/proxmox-config-tarballs/` | daily after 03:00 (timer checks every 15 min) |
-| Unraid config | `unraid-config-backup.sh`: rsync pull of `/boot/config` (minus `*.txz`/`*.tgz` plugin packages, `unraid-config-exclude.txt`), plugin list, VM definitions (`virsh dumpxml`) | restic repo `/srv/backup/unraid-config` on butlah, mirror `Backup/Butlah/unraid-config`, tarballs in `Backup/Butlah/unraid-config-tarballs/` | daily after 03:00 |
-| Laptop copy | `laptop-pull.sh` (runs **on the laptop**): `rsync -a --delete root@butlah:/srv/backup/` | `/srv/backup/` holds `export/` (`*-latest.tar.gz` + `SHA256SUMS`), `proxmox-config/`, `unraid-config/`. Mirroring a restic repo copies **every retained snapshot** | whenever the laptop's backup runs |
+| Proxmox job scheduler, 02:00 | `vzdump` (job `backup-c87aa9a6-b031`) | butlah | Snapshots every VM and sends it to PBS |
+| `vzdump`, before each VM | `/root/backup/vzdump-hook.sh` (+ `lib/gen_vm_dump.py`, `vm-dumps.json`) | hook on butlah, dump inside the VM | Makes the database dumps (diagram A) |
+| `host-config-backup.timer` (15 min) | `host-config-backup.sh --if-due` | butlah | Proxmox config -> restic (diagram B) |
+| `unraid-config-backup.timer` (15 min) | `unraid-config-backup.sh --if-due` | butlah (reads Unraid over SSH) | Unraid config -> restic (diagram B) |
+| `backup-check.timer` (hourly) | `backup-check.sh` | butlah | Emails you if a guest has no PBS backup for 2 days, a config backup is stale for 2 days, PBS storage is over 80%, or a guest has over 30 snapshots (pruning not happening) |
+| PBS (its own scheduler, set on the PBS VM) | prune and garbage collection | PBS VM | Keeps 7 daily / 4 weekly / 6 monthly. PVE's storage entry is `keep-all`, so only PBS deletes old backups |
+| `restic_backup.sh` (laptop) | backup of the laptop, pull from the NAS | laptop | Section 12.5 |
 
-Secrets (`/etc/pve/priv`, SSH keys, duckdns token, Unraid licence key) are **in** the repos and
-tarballs, in clear, by choice; never put them in git. Files are mode 600.
+Also: `ALERT_DRY=1` or `backup-check.sh --dry-run` prints alerts instead of sending. PVE's built-in notification targets only go to mail-to-root (undeliverable), so they are not used.
 
-### Alerts
-Scripts POST to Alertmanager (`http://192.168.1.211:9093/api/v2/alerts`, the same Gmail path as
-section 4.6); the `postfix-relay` container itself publishes no port. `backup-check.sh`
-(hourly) alerts on: a guest with no PBS backup for 2 days, a config backup without success for
-2 days, PBS storage over 80%, a guest with >30 snapshots (prune not running). The hook alerts on
-a failed dump. Alerts are re-sent hourly with a 2 h life, so they resolve themselves.
-`ALERT_DRY=1` or `backup-check.sh --dry-run` prints instead of sending. PVE's own
-notification targets only go to mail-to-root (undeliverable), so they are not used.
+### 12.4 Copies, and what is NOT covered
 
-### Monthly restore test (required)
-`restore-reminder.sh` (timer, daily 09:00) emails a `RestoreTestDue` alert once a day while no
-test is recorded in the last 30 days. Do the test in `RESTORE-RUNBOOK.md` section 1 (restore one
-VM to a spare VMID **with its NIC removed**, one file from PBS, one file from each restic repo),
-then record it: `/root/backup/restore-reminder.sh --done "what you tested"`; `--status` shows
-the last one. First test done 2026-10-15 (VM 209, PBS file restore of a Grafana dump,
-restic restores, Postgres dump into a throwaway container); next due 2026-11-14.
+| What | Copy 1 (live) | Copy 2 | Copy 3 |
+|---|---|---|---|
+| VM disks | Proxmox (local-lvm) | PBS datastore on Unraid | none yet |
+| Databases | inside the VM | inside every PBS snapshot of that VM | none yet |
+| Proxmox config | butlah | restic on the Unraid share | `/srv/backup/proxmox-config` on butlah, laptop |
+| Unraid config | Unraid flash | `/srv/backup/unraid-config` on butlah | share mirror, laptop (Unraid also has its own flash backup) |
 
-### Unraid access (important)
-- Butlah reaches Unraid with **`/root/.ssh/id_ed25519_backup`** (no passphrase, needed for
-  timers). `/root/.ssh/id_ed25519` has a passphrase, so it only works in a shell with an
-  ssh-agent (that is why the AI session could not use it).
-- On Unraid the key is **read-only by design**: `/boot/config/ssh/root/authorized_keys` forces
-  `from="192.168.1.200",restrict,command="bash /boot/config/ssh/backup-gate.sh"`. The gate allows
-  only `rsync --server --sender` under `/boot/config` and `/mnt/user/appdata`, plus the keywords
-  `unraid-plugins` and `unraid-vm-xml`. Unraid's `/root` is RAM, so keys must also live on the flash
-  copy. To pull more paths (e.g. `/boot/syslinux`), edit the gate on Unraid.
-- Unraid has its own flash backup (Connect plugin / Main > Flash). Ours is a config copy
-  (~0.4 MB), not a flash image: it skips plugin packages (reinstalled from the `.plg` files), the
-  OS images (`bz*`) and `/boot/syslinux`.
-- `/mnt/user/appdata` is empty (no containers on Unraid), so there is no appdata repo. If that changes,
-  add one (the gate already allows reading it).
+Offsite: none yet. **Decision (2026-10-17): the NAS data itself (media, photos, anything on Unraid shares) not being backed up is accepted for now.** Parity only; the plan is to add a cloud backup eventually. Do not treat it as an oversight or nag about it, but keep it in mind when sizing new NAS-resident data (e.g. a photo library). **Not backed up:** the PBS VM itself (its OS disk, users, tokens; the runbook explains the rebuild), the Unraid OS images and `/boot/syslinux` (plugin packages are re-downloaded from the `.plg` files), media and other NAS data. `/mnt/user/appdata` on Unraid is empty today; if you add containers with data, an appdata backup has to be added. Secrets (`/etc/pve/priv`, SSH keys, duckdns token, Unraid licence key) are in the repos and tarballs **in clear, by choice** (files are mode 600); never put them in git.
 
-### Gotchas
-- vzdump runs hooks with a minimal `PATH`; `lib/common.sh` sets its own. Any new hook code must too.
-- A restored VM keeps the original MAC, IP and Tailscale node key. Remove its NIC before first boot.
-- `restic check` on a read-only NFS mount hangs (needs a lock): mount read-write or use `--no-lock`.
-- The NFS mount of `Backup` is taken under a lock (`/run/backup-share.lock`) so one job's umount
-  cannot pull it from under another.
-- Never put a PBS datastore (or anything restic) on `/mnt/user` paths via NFS: shfs stale handles (section 7.6).
+### 12.5 The laptop
+Per the owner: `~/bin/restic/restic_backup.sh` backs the laptop up to the NAS (`Backup/Framework`) and also pulls from the NAS share `Backup/{unraid_appdata,unraid_config,proxmox_config}`. The restic repos keep every retained snapshot (7 daily / 4 weekly / 6 monthly), so a pull of a repo folder brings the history too.
 
-### Known gaps
-- **PBS itself is not backed up**: its OS disk (`/mnt/user/domains/...`) and its users/tokens/datastore
-  definition. Rebuild steps are in the runbook (re-attach the datastore with `--reuse-datastore`).
-- **The datastore is one copy on one array disk** (parity protects against a disk dying, not against
-  deletion or corruption). No offsite copy yet; a PBS sync job to a second target is the easy next step.
-- The Unraid `Backup` NFS export is LAN-wide while the repos in it hold secrets in clear: restrict it
-  to butlah and the laptop.
-- The laptop key and `laptop-gate.sh` (read-only rsync of `/srv/backup`) are written but not yet
-  installed on butlah's `authorized_keys`.
+**Names do not match yet.** Butlah writes to `Backup/Butlah/proxmox-config` and `Backup/Butlah/unraid-config` (no `unraid_appdata`: appdata is empty). The laptop script expects `Backup/proxmox_config`, `Backup/unraid_config`, `Backup/unraid_appdata`. One side has to change (see the open question at the end of the build log / ask the owner). `/root/backup/laptop-pull.sh` and `laptop-gate.sh` (pull `/srv/backup` straight from butlah) exist but are optional now that the NAS share already has both repos; they are not installed.
+
+### 12.6 Unraid access (important)
+- Butlah reaches Unraid with **`/root/.ssh/id_ed25519_backup`** (no passphrase, so timers can use it). `/root/.ssh/id_ed25519` has a passphrase and only works in a shell with an ssh-agent (that is why the AI session could not use it).
+- On Unraid that key is **read-only by design**: in `/boot/config/ssh/root/authorized_keys` it is forced to `from="192.168.1.200",restrict,command="bash /boot/config/ssh/backup-gate.sh"`. The gate allows only `rsync --server --sender` under `/boot/config` and `/mnt/user/appdata`, plus the words `unraid-plugins` and `unraid-vm-xml`. Unraid's `/root` is RAM, so keys also have to be on the flash copy. To pull more (e.g. `/boot/syslinux`), edit the gate on Unraid.
+- Our Unraid copy is a small config copy (about 0.4 MB), not a flash image: it skips plugin packages and OS images. Unraid's own flash backup (Connect / Main > Flash) is separate and still the full copy.
+
+### 12.7 Gotchas
+- vzdump starts hooks with a minimal `PATH`; `lib/common.sh` sets its own. New hook code must too.
+- A restored VM keeps the original MAC, IP and Tailscale node key: remove its NIC before first boot.
+- `restic check` on a read-only NFS mount hangs (it needs a lock): mount read-write or use `--no-lock`.
+- The `Backup` mount is taken under a lock (`/run/backup-share.lock`) so one job's unmount cannot pull it from under another.
+- No PBS datastore or restic repo on `/mnt/user` paths over NFS (shfs stale handles, section 7.6); the PBS vdisk points straight at `/mnt/disk3/...`.
+- Disks are created with `discard = "on"` and `ssd = true` in Terraform (2026-10-15). Without discard the thin pool never frees deleted blocks and PBS backs up the stale ones (347 GiB allocated vs about 165 GiB really used; 186 GiB after `fstrim`). **`terraform.tfvars` must mirror the live sizes and RAM**: change a disk or memory in Proxmox and update it in the same step, or the next `plan` wants to shrink it back. Compute (208, GPU) must keep `cpu_type = "host"`.
+
+### 12.8 Known gaps
+- **PBS itself is not backed up** (OS disk `/mnt/user/domains/...`, users, tokens). Rebuild steps are in the runbook (`--reuse-datastore`).
+- **One copy of VM disks, on one array disk.** Parity protects against a disk dying, not against deletion or corruption. No offsite copy yet; a PBS sync job to a second target is the easy next step.
+- **The `Backup` NFS export is LAN-wide and the repos in it hold secrets in clear.** Restrict it to butlah and the laptop.
+- The PBS prune job (7/4/6) is set by the owner on the PBS VM and has not been checked from butlah; `backup-check.sh` alerts if a guest piles up over 30 snapshots.
+
+Restore procedures (one VM, one file, a database dump, rebuilding butlah, Unraid or both): **`/root/backup/RESTORE-RUNBOOK.md`**.
