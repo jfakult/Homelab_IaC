@@ -54,6 +54,21 @@ pg_databases:
     cidrs:
       - 192.168.1.208/32      # compute
 
+# db (203): pg-immich, Immich's own Postgres container (VectorChord image; stock
+# pg-main cannot host it). Same VM, own dir/port/volume. Reached only from the
+# webapps VM (pg_hba + UFW). Version/port/names come from all/main.yml.
+immich_pg_dir: /opt/postgres-immich
+immich_pg_data_dir: "{{ immich_pg_dir }}/data"
+# Exact reference from Immich's own docker-compose.yml at {{ immich_version }}
+# (the digest pins what they tested). Bump together with immich_version, taking
+# the new reference from the release's docker-compose.yml.
+immich_pg_image: "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23"
+# letters and digits only (Immich's rule; also keeps it URL-safe)
+immich_db_password: "{{ vault_immich_postgres_password }}"
+immich_pg_cidrs:
+  - 192.168.1.205/32      # webapps
+  - 100.64.0.0/10         # Tailscale: ad-hoc DB client access
+
 # Bastion (201)
 tls_mode: "mkcert"      # mkcert | letsencrypt
 tls_cert_path: "/etc/nginx/tls/{{ gateway_domain_root }}.crt"

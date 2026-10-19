@@ -1,4 +1,6 @@
 # Managed by Ansible (roles/misc/tasks/nas_resilience.yml)
 NAS_IP={{ nas_ip }}
-NAS_MOUNTS="{{ nas_mount_paths | join(' ') }}"
+# Every NAS mount this host's play declares (install_nas_reqs.yml records each
+# one), plus any extra paths given as nas_mount_paths.
+NAS_MOUNTS="{{ ((nas_mount_paths | default([])) + (nas_mounts_managed | default([]))) | map('regex_replace', '/+$', '') | unique | join(' ') }}"
 NAS_WAIT_SECONDS={{ nas_wait_seconds | default(180) }}

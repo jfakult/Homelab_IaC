@@ -88,8 +88,34 @@
   become_method: sudo
   pre_tasks:
     - import_tasks: roles/misc/tasks/install_docker_and_compose.yml
-  roles:
-    - compute
+  # compute-lan (Ollama, Whisper, Open WebUI, Immich ML) has no WAN access, but
+  # model pulls and downloads need it. The play opens the WAN toggle for its own
+  # duration and closes it again at the end, also when a task fails.
+  # (/opt/toggle-wan-egress.sh is dropped by the role itself, so on a fresh VM
+  # there is nothing to open yet and nothing blocking.)
+  tasks:
+    - name: Compute role with WAN egress open for downloads
+      block:
+        - name: Is the WAN toggle script installed?
+          stat:
+            path: /opt/toggle-wan-egress.sh
+          register: _wan_toggle
+          tags: always
+
+        - name: Open compute-lan WAN egress
+          command: /opt/toggle-wan-egress.sh open
+          when: _wan_toggle.stat.exists
+          changed_when: false
+          tags: always
+
+        - import_role:
+            name: compute
+      always:
+        - name: Close compute-lan WAN egress
+          command: /opt/toggle-wan-egress.sh close
+          when: _wan_toggle.stat is defined and _wan_toggle.stat.exists
+          changed_when: false
+          tags: always
 
 - name: Configure Monitoring Server
   hosts: monitoring

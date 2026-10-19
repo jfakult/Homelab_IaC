@@ -9,6 +9,12 @@
 #      /proc/<pid>/root). A mismatch means the container is holding a stale
 #      mount or an empty directory that was there before the NAS mounted.
 #      Restart it (at most once per RESTART_COOLDOWN per container).
+#   3. A container that FAILED TO START (e.g. at boot, while the NAS mount was
+#      still missing: "error mounting /srv/... no such device") stays down even
+#      with restart: unless-stopped. Once the path is healthy again, start every
+#      such container (State.Error set, restart policy not "no") that binds
+#      something under that path. Containers stopped by hand have no State.Error
+#      and are left alone.
 #
 #   --check   report only: no remount, no restart. Exit status = number of
 #             problems. Used by nas_crash_drill.sh.
@@ -50,6 +56,22 @@ for p in $NAS_MOUNTS; do
     fi
 
     command -v docker >/dev/null || continue
+    for c in $(docker ps -a --filter status=created --filter status=exited --format '{{.Names}}'); do
+        [ -n "$(docker inspect -f '{{.State.Error}}' "$c")" ] || continue
+        pol=$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "$c")
+        [ -n "$pol" ] && [ "$pol" != no ] || continue
+        docker inspect -f '{{json .HostConfig.Binds}}' "$c" | grep -q "\"$p[/\":]" || continue
+        bad "$c failed to start and is down (binds $p)"
+        [ "$MODE" = run ] && [ "$healthy" = 1 ] || continue
+        last=$(cat "$STATE/start.$c" 2>/dev/null || echo 0)
+        if [ $(( $(date +%s) - last )) -lt "$RESTART_COOLDOWN" ]; then
+            say "$c: started recently, not again yet"
+            continue
+        fi
+        date +%s > "$STATE/start.$c"
+        say "$c: starting (it failed to start earlier)"
+        docker start "$c" >/dev/null
+    done
     for c in $(docker ps --format '{{.Names}}'); do
         pid=$(docker inspect -f '{{.State.Pid}}' "$c")
         while read -r src dst; do

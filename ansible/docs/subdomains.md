@@ -16,6 +16,7 @@ subdomains:
     upstream_host: "{{ hostvars['monitoring'].ansible_host }}"
     upstream_port: 3030
     aliases: [quality]       # optional: extra paths that redirect to the subdomain
+    proxy_request_buffering: false   # optional: stream request bodies (big uploads, e.g. photos)
 ```
 
 That one entry is the only thing you should ever need to hand-write. It

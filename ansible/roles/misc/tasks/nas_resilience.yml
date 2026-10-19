@@ -1,5 +1,7 @@
-# Safeguards for hosts that mount the NAS over NFS. Include with:
-#   vars: { nas_mount_paths: [/srv/www, /srv/nas] }
+# Safeguards for hosts that mount the NAS over NFS. Import it AFTER the host's
+# install_nas_reqs.yml imports: every mount those declare is protected
+# automatically (nas_mounts_managed). `nas_mount_paths` is only for extra
+# paths that are not mounted through install_nas_reqs.yml.
 # - nas-wait.service   orders Docker after the NAS mounts (bounded wait)
 # - nas-watchdog.timer remounts dead mounts, restarts containers holding a
 #                      stale/empty view of them
@@ -64,3 +66,18 @@
   loop:
     - nas-watchdog.timer
     - docker-autoheal.timer
+
+# The Public share used to be mounted inside the web root; it is now mounted at
+# /srv/share. The old fstab line has no mount point of its own and only produces
+# inactive automount units, so remove it wherever it is still present.
+- name: Remove the retired /srv/www/html/share fstab entry
+  lineinfile:
+    path: /etc/fstab
+    regexp: '^\S+:/mnt/user/Public\s+/srv/www/html/share/?\s'
+    state: absent
+  register: _fstab_old_share
+
+- name: Reload systemd after the fstab change
+  systemd:
+    daemon_reload: true
+  when: _fstab_old_share is changed

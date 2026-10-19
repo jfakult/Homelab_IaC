@@ -25,8 +25,6 @@
 
 - name: NAS resilience (boot ordering, watchdog, autoheal)
   import_tasks: ../../misc/tasks/nas_resilience.yml
-  vars:
-    nas_mount_paths: ["{{ media_paths.root_media }}"]
   tags: nas
 
 #- name: Mount NAS Media metadata Share

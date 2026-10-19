@@ -1,0 +1,61 @@
+# Immich server + Valkey (webapps). Managed by roles/webapps (tasks/immich.yml).
+# Machine learning runs on compute (GPU) and the database on the db VM
+# (pg-immich), so this stack has no ML or Postgres container.
+services:
+  immich-server:
+    image: ghcr.io/immich-app/immich-server:{{ immich_version }}
+    container_name: immich-server
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # IMMICH_CONFIG_FILE is set in .env when the settings are Ansible-managed
+      IMMICH_TELEMETRY_INCLUDE: all
+    volumes:
+      # The whole share is the library ({{ immich_library_dir }}, IMMICH_MEDIA_LOCATION
+      # in .env). Bound at the share root on purpose: the Unraid NAS drops NFS
+      # handles and a bind of a subdirectory then stays "Stale file handle" until
+      # the container restarts (see the kiwix compose).
+      - {{ immich_nas_mount }}:/mnt/photos
+      - /etc/localtime:/etc/localtime:ro
+{% if immich_config_managed %}
+      - ./immich-config.json:/config/immich-config.json:ro
+{% endif %}
+    ports:
+      - "{{ immich_port }}:2283"
+      - "{{ immich_metrics_api_port }}:{{ immich_metrics_api_port }}"
+      - "{{ immich_metrics_worker_port }}:{{ immich_metrics_worker_port }}"
+    depends_on:
+      valkey:
+        condition: service_healthy
+    # Fails when the NAS library cannot be read (stale NFS handle) or the app is
+    # down; docker-autoheal.timer (roles/misc nas_resilience) then restarts it.
+    healthcheck:
+      test: ["CMD-SHELL", "ls {{ immich_library_dir }} >/dev/null && immich-healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # The first start after an install or upgrade runs the database migrations
+      # and takes several minutes (4 min measured). Autoheal restarts an
+      # unhealthy container, so the start period must outlast that.
+      start_period: 10m
+    labels:
+      autoheal: "true"
+      autoheal.log_pattern: "Stale file handle"
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  valkey:
+    image: docker.io/valkey/valkey:9@sha256:c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1d
+    container_name: immich-valkey
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "[ \"$$(valkey-cli ping)\" = 'PONG' ]"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,0 +1,50 @@
+# Immich machine learning (smart search, faces, OCR) on the GPU. The Immich
+# server on webapps calls it over the LAN at {{ immich_ml_url }}.
+# Must run the same version as the server (immich_version in all/main.yml).
+# Managed by roles/compute (tasks/immich_ml.yml).
+#
+# Egress is LAN/Tailscale-only (compute-lan, firewall.yml). The model files are
+# downloaded from Hugging Face the first time they are needed, so the first
+# deploy needs the WAN toggle open (docs/immich.md). The GPU self-healing
+# (gpu-heal.sh) picks this container up automatically: it has an NVIDIA device
+# request.
+services:
+  immich-machine-learning:
+    image: ghcr.io/immich-app/immich-machine-learning:{{ immich_version }}-cuda
+    container_name: immich-machine-learning
+    restart: unless-stopped
+    ports:
+      - "{{ immich_ml_port }}:3003"
+    volumes:
+      - immich-model-cache:/cache
+    environment:
+      # Unload models after 5 min idle so the GPU is shared with Ollama and Whisper.
+      MACHINE_LEARNING_MODEL_TTL: "300"
+      # Download the models at start (when the WAN toggle is open) instead of on
+      # the first search/face job. Names match the Immich defaults.
+      MACHINE_LEARNING_PRELOAD__CLIP__TEXTUAL: "{{ immich_ml_clip_model }}"
+      MACHINE_LEARNING_PRELOAD__CLIP__VISUAL: "{{ immich_ml_clip_model }}"
+      MACHINE_LEARNING_PRELOAD__FACIAL_RECOGNITION__DETECTION: "{{ immich_ml_face_model }}"
+      MACHINE_LEARNING_PRELOAD__FACIAL_RECOGNITION__RECOGNITION: "{{ immich_ml_face_model }}"
+      MACHINE_LEARNING_PRELOAD__OCR__DETECTION: "{{ immich_ml_ocr_model }}"
+      MACHINE_LEARNING_PRELOAD__OCR__RECOGNITION: "{{ immich_ml_ocr_model }}"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - compute-lan
+
+networks:
+  compute-lan:
+    external: true
+
+volumes:
+  immich-model-cache:

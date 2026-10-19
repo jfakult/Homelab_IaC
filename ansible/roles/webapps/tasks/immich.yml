@@ -1,0 +1,53 @@
+# Immich server + Valkey on webapps. The library lives on its own NAS share
+# (Immich) mounted at /srv/photos (covered by nas_resilience: boot wait, watchdog, autoheal), the
+# database on pg-immich (db VM) and the ML service on compute. Details and the
+# manual steps (Pocket-ID client, first admin, ML model download) are in
+# docs/immich.md.
+
+- name: Ensure Immich directory
+  file:
+    path: /opt/immich
+    state: directory
+    mode: "0755"
+
+- name: Drop Immich .env
+  template:
+    src: immich.env.j2
+    dest: /opt/immich/.env
+    mode: "0600"
+  notify: Restart immich docker
+
+- name: Drop Immich config file (Ansible-managed settings)
+  template:
+    src: immich-config.json.j2
+    dest: /opt/immich/immich-config.json
+    mode: "0600"
+  when: immich_config_managed
+  notify: Restart immich docker
+
+- name: Drop Immich compose
+  template:
+    src: docker-compose-immich.yml.j2
+    dest: /opt/immich/docker-compose.yml
+    mode: "0600"
+  notify: Restart immich docker
+
+# A changed .env/config/compose recreates the stack once, before the checks.
+- name: Apply config changes now
+  meta: flush_handlers
+
+- name: Bring up Immich
+  command: docker compose up -d
+  args:
+    chdir: /opt/immich
+  register: _immich_up
+  changed_when: "'Recreated' in _immich_up.stderr or 'Created' in _immich_up.stderr or 'Started' in _immich_up.stderr"
+
+- name: Wait for Immich to answer
+  uri:
+    url: "http://localhost:{{ immich_port }}/api/server/ping"
+    return_content: true
+  register: _immich_ping
+  until: _immich_ping.status == 200
+  retries: 10
+  delay: 5

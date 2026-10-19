@@ -1,0 +1,50 @@
+{# Immich settings managed by Ansible. With this file in place the matching
+   settings are read-only in the admin UI. Set immich_config_managed: false in
+   group_vars/apps.yml to manage them in the UI instead. #}
+{% set cfg = {
+  "machineLearning": {
+    "enabled": true,
+    "urls": [immich_ml_url]
+  },
+  "oauth": {
+    "enabled": true,
+    "issuerUrl": sso_base,
+    "clientId": immich_oidc_client_id,
+    "clientSecret": immich_oidc_client_secret,
+    "scope": "openid email profile",
+    "buttonText": "Login with Pocket-ID",
+    "autoRegister": true,
+    "autoLaunch": false,
+    "storageLabelClaim": "preferred_username",
+    "defaultStorageQuota": immich_default_quota_gib,
+    "mobileOverrideEnabled": true,
+    "mobileRedirectUri": immich_external_domain ~ "/api/oauth/mobile-redirect"
+  },
+  "passwordLogin": { "enabled": true },
+  "storageTemplate": {
+    "enabled": true,
+    "hashVerificationEnabled": true,
+    "template": immich_storage_template
+  },
+  "server": { "externalDomain": immich_external_domain },
+  "trash": { "enabled": true, "days": 30 },
+  "user": { "deleteDelay": immich_user_delete_delay_days },
+  "backup": { "database": { "enabled": false } },
+  "newVersionCheck": { "enabled": false },
+  "notifications": {
+    "smtp": {
+      "enabled": true,
+      "from": "Immich <" ~ smtp_relay_username ~ ">",
+      "replyTo": smtp_relay_username,
+      "transport": {
+        "host": hostvars['monitoring'].ansible_host,
+        "port": 25,
+        "secure": false,
+        "ignoreCert": true,
+        "username": "",
+        "password": ""
+      }
+    }
+  }
+} %}
+{{ cfg | to_nice_json }}

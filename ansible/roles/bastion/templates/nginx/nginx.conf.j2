@@ -103,7 +103,7 @@ http {
     include /etc/nginx/snippets/subdomain-redirects.conf;
 
     location /share {
-		  alias /usr/share/nginx/html/share;   # mounted NAS share
+		  alias /usr/share/nginx/share;   # the Public NAS share (/srv/share, bound by the compose file)
 		  autoindex on;
 		}
 

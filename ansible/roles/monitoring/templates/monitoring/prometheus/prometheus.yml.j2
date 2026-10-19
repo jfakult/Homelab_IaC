@@ -34,6 +34,12 @@ scrape_configs:
       - targets: ['192.168.1.199:9633']
         labels: { host: unraid }
 
+  # Immich (webapps): API worker and microservices worker metrics
+  # (IMMICH_TELEMETRY_INCLUDE=all; v3 metric names use dots)
+  - job_name: 'immich'
+    static_configs:
+      - targets: ['{{ hostvars['webapps'].ansible_host }}:{{ immich_metrics_api_port }}', '{{ hostvars['webapps'].ansible_host }}:{{ immich_metrics_worker_port }}']
+
   - job_name: 'blackbox_http'
     metrics_path: /probe
     params:
@@ -44,6 +50,7 @@ scrape_configs:
           - http://192.168.1.206:8096
           - http://192.168.1.202/admin
           - http://192.168.1.199      # unraid webui
+          - http://{{ hostvars['webapps'].ansible_host }}:{{ immich_port }}/api/server/ping   # immich
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target

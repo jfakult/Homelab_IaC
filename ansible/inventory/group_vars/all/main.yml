@@ -35,6 +35,12 @@ subdomains:
     upstream_host: "{{ hostvars['monitoring'].ansible_host }}"
     upstream_port: 3030
     aliases: [quality]       # fakult.net/quality and /quality/... also redirect here
+  - name: photos
+    upstream_host: "{{ hostvars['webapps'].ansible_host }}"
+    upstream_port: 2283
+    # Large uploads: send the body to Immich as it arrives instead of
+    # spooling the whole file to the bastion's disk first.
+    proxy_request_buffering: false
 
 media_mount_opts:   "rw,hard,nconnect=8,vers=4.2,noatime,rsize=1048576,wsize=1048576,noauto,x-systemd.automount,_netdev,nofail,mount-timeout=10s,x-systemd.idle-timeout=20"
 webapps_mount_opts: "rw,hard,nconnect=8,vers=4.2,noatime,rsize=1048576,wsize=1048576,noauto,x-systemd.automount,_netdev,nofail"
@@ -108,3 +114,26 @@ smokeping_targets:
 # speedtest-tracker (monitoring VM): how often it runs a test, as a cron
 # expression in the container's timezone. Every 6 hours.
 speedtest_schedule: "0 */6 * * *"
+
+# --- Immich (photos.fakult.net) ---------------------------------------------
+# server + Valkey on webapps, machine learning on compute (GPU), its own
+# VectorChord Postgres container (pg-immich) on the db VM. See docs/immich.md.
+# Every Immich component must run the same version: change it here and re-run
+# the db (no change needed), compute and webapps plays together.
+immich_version: "v3.3.3"
+immich_port: 2283                 # server (webapps)
+immich_ml_port: 3003              # machine learning (compute)
+immich_pg_port: 5433              # pg-immich (db VM); pg-main keeps 5432
+immich_db_name: immich
+immich_db_user: immich
+# Library on its own NAS share (Immich), mounted at /srv/photos on webapps
+immich_nas_share: /mnt/user/Immich
+immich_nas_mount: /srv/photos
+immich_library_dir: /mnt/photos       # path inside the container (the share root)
+immich_metrics_api_port: 8081
+immich_metrics_worker_port: 8082
+# Machine-learning models (Immich defaults). Preloaded by the ML container, and
+# the same names are what the server uses unless the settings say otherwise.
+immich_ml_clip_model: "ViT-B-32__openai"
+immich_ml_face_model: "buffalo_l"
+immich_ml_ocr_model: "PP-OCRv5_mobile"

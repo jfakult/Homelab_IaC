@@ -18,3 +18,7 @@
   shell: docker compose up -d --force-recreate
   args: { chdir: /opt/geo-proxy }
   ignore_errors: true
+
+- name: Restart immich docker
+  shell: docker compose up -d --force-recreate
+  args: { chdir: /opt/immich }

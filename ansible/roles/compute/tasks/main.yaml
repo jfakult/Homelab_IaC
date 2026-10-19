@@ -381,6 +381,11 @@
   until: _searxng_ready.status == 200
   tags: chat
 
+# --- Immich machine learning ---
+- name: Immich machine learning (CUDA)
+  import_tasks: immich_ml.yml
+  tags: [immich, gpu]
+
 - name: Restrict compute-lan to LAN/Tailscale
   import_tasks: firewall.yml
   tags: [ollama, whisper, chat]

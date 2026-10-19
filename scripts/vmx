@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Run a shell command inside a VM via the guest agent and print its output.
+#   vmx <vmid|name> '<command>'     (VMID = last IP octet; names: see context.md)
+# Waits up to $VMX_TIMEOUT seconds (default 300) instead of returning a pid after 30 s.
+set -u
+id="$1"; shift
+case "$id" in dns) id=202;; db) id=203;; sso) id=204;; webapps) id=205;; media) id=206;; compute) id=208;; monitoring) id=211;; bastion) id=201;; esac
+qm guest exec "$id" --timeout "${VMX_TIMEOUT:-300}" -- bash -c "$*" | python3 -c '
+import sys, json
+d = json.load(sys.stdin)
+sys.stdout.write(d.get("out-data", "")); sys.stderr.write(d.get("err-data", ""))
+sys.exit(d.get("exitcode", 0))'

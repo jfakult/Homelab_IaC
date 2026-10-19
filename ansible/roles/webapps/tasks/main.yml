@@ -33,6 +33,14 @@
     nas_share_path: /mnt/user/Server_WebappsArray
     mount_opts: "{{ webapps_mount_opts }}"
 
+- name: Mount NAS Photos Share (Immich library)
+  import_tasks: ../../misc/tasks/install_nas_reqs.yml
+  vars:
+    local_mount_path: "{{ immich_nas_mount }}"
+    nas_share_path: "{{ immich_nas_share }}"
+    mount_opts: "{{ webapps_mount_opts }}"
+  tags: [immich, nas]
+
 - name: Ensure kiwix directory
   file:
     path: "{{ item }}"
@@ -68,9 +76,11 @@
 # docker-autoheal (kiwix: stale NAS NFS handles - see its compose healthcheck)
 - name: NAS resilience (boot ordering, watchdog, autoheal)
   import_tasks: ../../misc/tasks/nas_resilience.yml
-  vars:
-    nas_mount_paths: [/srv/www, /srv/nas]
   tags: [kiwix, nas]
+
+- name: Immich (photo library)
+  import_tasks: immich.yml
+  tags: immich
 
 - name: Ensure journal directory
   file:

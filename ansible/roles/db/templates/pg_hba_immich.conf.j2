@@ -1,0 +1,10 @@
+# Managed by roles/db (immich_pg_cidrs in group_vars/infra.yml).
+# Only the Immich role, only its database, only from these networks.
+{% for cidr in immich_pg_cidrs %}
+host    {{ immich_db_name }}   {{ immich_db_user }}   {{ cidr }}   scram-sha-256
+{% endfor %}
+
+# inside the container (healthcheck, docker exec)
+local   all   all                     trust
+host    all   all   127.0.0.1/32      scram-sha-256
+host    all   all   ::1/128           scram-sha-256

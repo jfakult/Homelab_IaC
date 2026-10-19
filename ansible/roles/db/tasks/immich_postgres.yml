@@ -1,0 +1,56 @@
+# pg-immich: Immich's own Postgres container on the db VM (VectorChord image).
+# Own dir, own port (immich_pg_port), own data volume on this VM's disk.
+# The role/database are created by the image's first init from POSTGRES_USER /
+# POSTGRES_DB, so there is no separate provisioning step. pg_hba.conf is
+# replaced after the first start (it cannot be placed earlier: initdb refuses
+# a non-empty data directory).
+
+- name: Create pg-immich dir
+  file:
+    path: "{{ immich_pg_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Drop pg-immich compose
+  template:
+    src: docker-compose-immich.yml.j2
+    dest: "{{ immich_pg_dir }}/docker-compose.yml"
+    mode: "0600"
+
+- name: Up pg-immich
+  command: docker compose up -d
+  args:
+    chdir: "{{ immich_pg_dir }}"
+  register: _pgi_up
+  changed_when: "'Recreated' in _pgi_up.stderr or 'Created' in _pgi_up.stderr or 'Started' in _pgi_up.stderr"
+
+- name: Wait for pg-immich ready
+  command: docker exec pg-immich pg_isready -U {{ immich_db_user }} -d {{ immich_db_name }}
+  register: _pgi_ready
+  until: _pgi_ready.rc == 0
+  retries: 30
+  delay: 2
+  changed_when: false
+
+- name: Drop pg-immich pg_hba.conf into the data directory
+  template:
+    src: pg_hba_immich.conf.j2
+    dest: "{{ immich_pg_data_dir }}/pg_hba.conf"
+    owner: "999"
+    group: "999"
+    mode: "0600"
+  register: _pgi_hba
+
+- name: Reload pg-immich config (picks up pg_hba.conf, no restart)
+  command: >
+    docker exec pg-immich psql -U {{ immich_db_user }} -d {{ immich_db_name }}
+    -c "SELECT pg_reload_conf();"
+  when: _pgi_hba is changed
+
+- name: Allow pg-immich from its clients
+  ufw:
+    rule: allow
+    port: "{{ immich_pg_port }}"
+    proto: tcp
+    src: "{{ item | regex_replace('/32$', '') }}"
+  loop: "{{ immich_pg_cidrs }}"

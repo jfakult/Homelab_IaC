@@ -31,3 +31,11 @@
 # chown -R nobody:users  [dir]
 # find [dir] -type d -exec chmod 2775 {} \;
 # find [dir] -type f -exec chmod 0664 {} \;
+
+# Record the mount so nas_resilience protects it without a hand-kept list
+# (boot wait, watchdog, restart of containers using it). `always`: the list is
+# complete even when a run is limited to tags that skip the mount tasks above.
+- name: Remember {{ local_mount_path }} as a NAS mount of this host
+  set_fact:
+    nas_mounts_managed: "{{ ((nas_mounts_managed | default([])) + [local_mount_path | regex_replace('/+$', '')]) | unique }}"
+  tags: always

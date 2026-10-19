@@ -119,3 +119,28 @@ searxng_secret_key: "{{ vault_searxng_secret_key }}"
 # Pinned rather than Docker-assigned so the firewall rule doesn't need a
 # `docker network inspect` step to discover it.
 compute_lan_subnet: "172.30.0.0/24"
+
+# --- Immich (see docs/immich.md) ---
+immich_db_password: "{{ vault_immich_postgres_password }}"
+immich_db_host: "{{ hostvars['db'].ansible_host }}"
+immich_ml_url: "http://{{ hostvars['compute'].ansible_host }}:{{ immich_ml_port }}"
+# Pocket-ID OIDC client, created by hand (docs/immich.md step 3)
+immich_oidc_client_id: "{{ vault_immich_oidc_client_id }}"
+immich_oidc_client_secret: "{{ vault_immich_oidc_client_secret }}"
+immich_external_domain: "https://photos.{{ gateway_domain_root }}"
+# Storage template, enabled before the first import so files never need moving.
+# {% raw %} keeps Ansible from reading Immich's own {{ }} placeholders.
+immich_storage_template: "{% raw %}{{y}}/{{y}}-{{MM}}/{{filename}}{% endraw %}"
+# Default storage quota (GiB) for users created through SSO; 1024 = 1 TiB.
+# Immich has no global default for locally created users: set those per user
+# in Administration -> Users. Users without a quota (e.g. the first admin) are unlimited.
+immich_default_quota_gib: 1024
+# Days a deleted account is kept before its data is removed (Immich default 7)
+immich_user_delete_delay_days: 30
+# Mail goes through the postfix relay on the monitoring VM (LAN-only, no login, plain
+# port 25; it only relays for the sender address smtp_relay_username).
+# Not managed here on purpose: Immich's own database dump (the db VM backup covers it)
+# and the new-version check (container age is handled by monitoring).
+# true: settings come from the config file rendered by Ansible (the Immich admin
+# UI becomes read-only for those settings). false: manage settings in the UI.
+immich_config_managed: true

@@ -1,0 +1,31 @@
+# Immich machine learning container (CUDA) on compute. See docs/immich.md for
+# the one-time model download (WAN toggle) and how the server is pointed here.
+
+- name: Ensure Immich ML directory
+  file:
+    path: /opt/immich-ml
+    state: directory
+    mode: "0755"
+
+- name: Drop Immich ML compose file
+  template:
+    src: docker-compose-immich-ml.yml.j2
+    dest: /opt/immich-ml/docker-compose.yml
+    mode: "0644"
+
+- name: Bring up Immich ML
+  command: docker compose up -d
+  args:
+    chdir: /opt/immich-ml
+  register: _immich_ml_up
+  changed_when: "'Recreated' in _immich_ml_up.stderr or 'Created' in _immich_ml_up.stderr or 'Started' in _immich_ml_up.stderr"
+
+# The first start downloads the models (WAN toggle open) and can take minutes.
+- name: Wait for Immich ML to answer
+  uri:
+    url: "http://localhost:{{ immich_ml_port }}/ping"
+    return_content: true
+  register: _immich_ml_ping
+  until: _immich_ml_ping.status == 200
+  retries: 10
+  delay: 5

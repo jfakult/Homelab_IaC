@@ -84,12 +84,12 @@ Groups: `external` (bastion), `infra` (dns, db, sso, monitoring), `apps`
 | butlah (Proxmox) | .200 | no exporters (**verified live**: nothing on 9100/9113/8080) | **Not in ansible inventory.** `/etc/resolv.conf` lists 192.168.1.202 first (hand-managed). |
 | 201 bastion | .201 | `rp-nginx` (/opt/gateway), certbot, cadvisor, exporters | Only public-facing VM. TLS termination + reverse proxy. nginx exists **only** as the container: the distro `nginx` package and `python3-certbot-nginx` were removed 2026-10-14 (certbot renews via `--webroot`); `nginx.service` is masked. `nginx-common` stays - it owns `/etc/nginx`, which rp-nginx bind-mounts. |
 | 202 dns | .202 | `dns-pihole-1`, `dns-unbound-1` (/opt/dns), NordVPN client | Pi-hole web at `http://192.168.1.202/admin`. |
-| 203 db | .203 | `pg-main` postgres:16 (/opt/postgres) | **One container** (`pg-main` is the container name, not a DB or role) holding one database per app (**verified live** 2026-10-18): `blinko` (journal), `pocketid`, `grafana`, `speedtest`, `openwebui`, each owned by its own role, plus the default `postgres`/templates. The VM has 8 GB RAM (ballooning floor 4 GB). Admin (superuser) role: **`butlah`**. Pocket-ID uses SQLite (`/opt/pocket-id/data/pocket-id.db`). `roles/db` (`tasks/main.yml`, tags `db`/`journal`) manages the container, `pg_hba.conf`, UFW and one role+DB per entry of `pg_databases` in `group_vars/infra.yml`; to add an app, add an entry (name, owner, password, allowed CIDRs). Images other than stock Postgres (e.g. Immich's VectorChord build) get their own container. |
+| 203 db | .203 | `pg-main` postgres:16 (/opt/postgres), `pg-immich` (/opt/postgres-immich, :5433) | **One container** (`pg-main` is the container name, not a DB or role) holding one database per app (**verified live** 2026-10-18): `blinko` (journal), `pocketid`, `grafana`, `speedtest`, `openwebui`, each owned by its own role, plus the default `postgres`/templates. The VM has 8 GB RAM (ballooning floor 4 GB). Admin (superuser) role: **`butlah`**. `roles/db` (`tasks/main.yml`, tags `db`/`journal`) manages the container, `pg_hba.conf`, UFW and one role+DB per entry of `pg_databases` in `group_vars/infra.yml`; to add an app, add an entry (name, owner, password, allowed CIDRs). Images other than stock Postgres get their own container: `pg-immich` (/opt/postgres-immich, :5433, VectorChord image, database `immich`) is Immich's, managed by `roles/db/tasks/immich_postgres.yml` (tag `immich`). |
 | 204 sso | .204 | `pocket-id` (/opt/pocket-id), port 1411 | OIDC provider for everything. Database: the `pocketid` database on `pg-main` (`pocket_id_use_postgres: true`, migrated 2026-10-18 with Pocket-ID's own `export`/`import`; steps and the import pitfall in `ansible/docs/postgres-migrations.md`). `/opt/pocket-id/data` still holds the old `pocket-id.db` (rollback copy), the uploaded images, and `pre-postgres-export.zip` until they are cleaned up. Policy: every database that supports Postgres lives on the db VM; SQLite-only apps (Pi-hole, Jellyfin, the journal's vector store) stay local and are listed in `/root/backup/vm-dumps.json`. |
-| 205 webapps | .205 | `blinko-website` (/opt/journal, :1111), `kiwix` (/opt/kiwix), `geo-proxy` (/opt/geo-proxy, :8091) | The AI journal. Image `ghcr.io/jfakult/blinko-journal:latest` built by GitHub Actions in the *separate* `jfakult/blinko-journal` repo. NAS mounts `/srv/www`, `/srv/nas`. `geo-proxy` is a reverse-geocoding proxy, LAN/Tailscale-only (not on a bastion subdomain). Also runs the non-Docker `webapp-*` systemd apps (resume etc., section 7.5). |
+| 205 webapps | .205 | `blinko-website` (/opt/journal, :1111), `kiwix` (/opt/kiwix), `geo-proxy` (/opt/geo-proxy, :8091), `immich-server` + `immich-valkey` (/opt/immich, :2283; library on the NAS share `Immich`, mounted at `/srv/photos`) | The AI journal. Image `ghcr.io/jfakult/blinko-journal:latest` built by GitHub Actions in the *separate* `jfakult/blinko-journal` repo. NAS mounts `/srv/www`, `/srv/nas`. `geo-proxy` is a reverse-geocoding proxy, LAN/Tailscale-only (not on a bastion subdomain). Also runs the non-Docker `webapp-*` systemd apps (resume etc., section 7.5). |
 | 206 media | .206 | `jellyfin` (:8096) + exporters (/opt/jellyfin) | Media on NAS via NFS. Jellyfin SSO plugin uses Pocket-ID. |
 | 207 storage | .207 | nothing | **Deprecated.** Was meant for Immich/Paperless/Nextcloud; those run on webapps (Postgres on the db VM). Powered off, autoboot off, 1 core / 512 MB, tagged `deprecated` in Proxmox (`started = false`, `on_boot = false` in `terraform.tfvars`); removed from the Ansible inventory; its disk (32 GB) and IP are kept. Delete the VM in Terraform to reclaim the disk. |
-| 208 compute | .208 | `ollama` (:11434), `whisper` (:8000), `open-webui` (:3000), `searxng` (:8888) | RTX 4060 Ti 16GB passed through (hostpci0), 32GB RAM, 256GB disk. Open WebUI stores its data in the `openwebui` database on `pg-main` (migrated 2026-10-18); only its chroma vector index stays on local disk. See section 7. |
+| 208 compute | .208 | `ollama` (:11434), `whisper` (:8000), `open-webui` (:3000), `searxng` (:8888), `immich-machine-learning` (/opt/immich-ml, :3003, CUDA) | RTX 4060 Ti 16GB passed through (hostpci0), 32GB RAM, 256GB disk. Open WebUI stores its data in the `openwebui` database on `pg-main` (migrated 2026-10-18); only its chroma vector index stays on local disk. See section 7. |
 | 209 containerlab | .209 | nothing | Placeholder. |
 | 210 misc | .210 | nothing | Scratchpad. |
 | 211 monitoring | .211 | prometheus :9090, grafana :3000, loki :3100, alertmanager :9093, blackbox :9115, `postfix-relay`, `speedtest-tracker` :3030, `smokeping` :3031 (all in /opt/monitoring) | speedtest-tracker is public at `speedtest.fakult.net` (the `speedtest` entry in `subdomains`; `fakult.net/speedtest` and `/quality` redirect there), protected by its own login. smokeping has no login and no bastion route: LAN/Tailscale only at `http://monitoring.yak-anoles.ts.net:3031/smokeping/`. Grafana and speedtest-tracker store their data in the `grafana` and `speedtest` databases on `pg-main` (migrated 2026-10-18; the old SQLite files stay in place as rollback). Both are defined in the monitoring compose template; speedtest's `APP_KEY` is `vault_speedtest_app_key` and must stay the same value (it encrypts data in its DB; the "base64:" prefix is added if missing). Smokeping's `Targets`/`General` are rendered from `smokeping_targets` in `all/main.yml`. See section 7
@@ -179,7 +179,8 @@ inventory name). Used for ad-hoc/remote access (e.g. a DB client to Postgres via
 - `compute-lan` (172.30.0.0/24, Ollama/Whisper/Open WebUI): LAN + Tailscale only,
   **WAN dropped**. `/opt/toggle-wan-egress.sh open|close` (on compute) temporarily
   opens WAN for `ollama pull` / new Whisper models; it is intentionally not persisted
-  when open. searxng is on a different network and has normal egress (it must
+  when open. The compute play opens it at its start and closes it at its end (also on
+  failure), so downloads (models, Immich ML) need no manual toggling. searxng is on a different network and has normal egress (it must
   search the internet).
 - `blinko-egress` (webapps): LAN + Tailscale accept rules, **WAN deliberately left
   open** (the journal calls `api.unstructured.io`; that host currently NXDOMAINs
@@ -423,6 +424,11 @@ Added 2026-10-14 after a NAS reboot. Shared task `roles/misc/tasks/nas_resilienc
   `st_dev:inode` host vs `/proc/<pid>/root<dest>` and restart on mismatch (stale handle,
   or container started on the empty mountpoint). 10 min per-container cooldown.
   NAS down = log only. `nas-watchdog.sh --check` = report only.
+  It also starts containers that failed to start (e.g. at boot, mount missing) once the mount is healthy again.
+  The list of protected mounts (`NAS_MOUNTS` in `/etc/nas-resilience.conf`) is generated by Ansible: every
+  `install_nas_reqs.yml` import records its mount (`nas_mounts_managed`), so a new NAS mount is covered
+  without editing a list; `nas_mount_paths` is only for extra paths. All of it is path-based, so any
+  container that binds something under those paths is covered, with no per-container configuration.
 - `docker-autoheal` (moved to `roles/misc/files`) now also runs on bastion and media.
   Labelled `autoheal=true`: kiwix, rp-nginx, jellyfin. Their healthchecks now also
   require the NAS-backed dir to list non-empty.
@@ -430,7 +436,7 @@ Added 2026-10-14 after a NAS reboot. Shared task `roles/misc/tasks/nas_resilienc
   by default; exit status = problems. Run it after any NAS reboot.
 - Not covered: `jobpipe` / `webapps-nas-sync` just fail one run and retry on schedule.
 - Unraid `fuse_remember=-1` was set 2026-10-14; exports are no_root_squash/no_all_squash.
-  The `/srv/www/html/share` (Public) fstab entry is intentionally not mounted.
+  The old `/srv/www/html/share` (Public) fstab entry is removed by `nas_resilience.yml`; Public is mounted at `/srv/share` and nginx's `/share` location aliases that.
 
 ## 8. Provisioning (below Ansible)
 `terraform/proxmox/` (bpg/proxmox provider) creates the VMs from cloud-init template
@@ -453,6 +459,14 @@ there is no Proxmox-level nameserver setting - DNS comes from Ansible.
    AI's API traffic needs DNS). Change one thing, verify, keep a rollback ready.
 5. Commit only when asked; never force-push; don't include secrets.
 6. Give a short summary and the next command; the owner will run deploys.
+   **Shell habits for me:** wait for things with an `until` loop that carries its own deadline. Not with the
+   `timeout` command, `sleep`, or `for ... sleep` loops, and never an unbounded loop. Pattern (the check itself
+   paces the loop, the deadline in seconds bounds it):
+   `end=$((SECONDS+120)); until curl -sf URL >/dev/null || [ $SECONDS -ge $end ]; do :; done`
+   then test the condition once more afterwards to see whether it was met or the deadline hit.
+   For commands inside VMs use the `vmx` helper (`scripts/vmx`, symlinked to `/usr/local/bin/vmx`
+   on butlah): `vmx monitoring 'docker ps'`, takes a VMID or VM name and waits up to `$VMX_TIMEOUT`
+   (default 300 s) for long commands such as image pulls. Prefer it over hand-rolled `qm guest exec` + JSON parsing.
 7. **Databases live on the db VM (203) whenever the app can use Postgres.** Do not add a
    SQLite file, a Postgres/MySQL container or a vector DB to an app VM. Instead:
    - Default: add an entry to `pg_databases` in `ansible/inventory/group_vars/infra.yml`
@@ -474,6 +488,13 @@ there is no Proxmox-level nameserver setting - DNS comes from Ansible.
    - Postgres never lives on a network share, and the app's own data (media, uploads) may.
    - **Never delete the original SQLite files, nightly `.bak` copies or export ZIPs of a migrated app**
      as part of cleanup; they are the rollback. Only the owner decides when they go.
+8. **New services bring a backup question to the owner.** Whenever a service or data store is turned
+   up (a new app, a NAS share, a database, a library), ask the owner: should its data go offsite,
+   and if so in a **new restic repo** (different cadence, retention or lifetime) or **bundled into an
+   existing one** (name the candidates from `/root/backup/cloud-backup.json`)? Or is it deliberately not
+   backed up? Do not decide silently: add the answer to `cloud-backup.json` (a repo/source, or a
+   line under `not_backed_up`) in the same change, and update section 12.9. Include what the
+   service needs to be restored (for example a database dump next to the files).
 
 ## 10. Known drift / open items (as of 2026-09-21)
 - Pi-hole `listeningMode=ALL` set live in the container volume, not in Ansible.
@@ -497,8 +518,13 @@ there is no Proxmox-level nameserver setting - DNS comes from Ansible.
 - **SQLite leftovers from the Postgres moves** (Pocket-ID, speedtest-tracker, Grafana, Open WebUI; all migrated 2026-10-18 and verified): after they have run cleanly for a day, remove their `sqlite` entries from `/root/backup/vm-dumps.json` (211: both; 208: only `webui.db`, keep `chroma.sqlite3`) because the db VM dump covers them now. The original SQLite files, the nightly `.bak` copies and the pre-migration copies in `/root/backup/pre-postgres-migrations/` and `/root/backup/pocket-id-pre-postgres/` are the rollback; the owner decides when they go (they hold secrets).
 - **Monitoring audit:** stale `prometheus_targets` (scrapes .200 for exporters butlah does not run; node exporters missing on media and monitoring), alert rules and Alertmanager routing, Grafana dashboards (Grafana admin password is still `changeme` in the monitoring compose), decide what to alert on for Immich/Postgres/GPU/NAS.
 
+- **Offsite backup:** enable `cloud-backup.json` (steps and open decisions in 12.9): bucket and key, butlah read-only on the Immich NFS export, repo passwords into the password manager, decide how the Immich and other databases get offsite, then `--install-units`.
+- **Quarterly image-age report:** every 3 months, email a list of Docker containers whose image is more than 3 months old and for which a newer version exists (compare local image creation date and digest with the registry). Report only; no automatic updates.
+
 ## 11. Cheat sheet
 ```
+# run anything in a VM (helper: scripts/vmx, VMID or name)
+vmx compute 'docker ps -a --format "{{.Names}}: {{.Status}}"'
 # health of a VM's containers
 qm guest exec 208 -- bash -c "docker ps -a --format '{{.Names}}: {{.Status}}'"
 # logs
@@ -616,7 +642,7 @@ Also: `ALERT_DRY=1` or `backup-check.sh --dry-run` prints alerts instead of send
 | Proxmox config | butlah | restic on the Unraid share | `/srv/backup/proxmox-config` on butlah, laptop |
 | Unraid config | Unraid flash | `/srv/backup/unraid-config` on butlah | share mirror, laptop (Unraid also has its own flash backup) |
 
-Offsite: none yet. **Decision (2026-10-17): the NAS data itself (media, photos, anything on Unraid shares) not being backed up is accepted for now.** Parity only; the plan is to add a cloud backup eventually. Do not treat it as an oversight or nag about it, but keep it in mind when sizing new NAS-resident data (e.g. a photo library). **Not backed up:** the PBS VM itself (its OS disk, users, tokens; the runbook explains the rebuild), the Unraid OS images and `/boot/syslinux` (plugin packages are re-downloaded from the `.plg` files), media and other NAS data. `/mnt/user/appdata` on Unraid is empty today; if you add containers with data, an appdata backup has to be added. Secrets (`/etc/pve/priv`, SSH keys, duckdns token, Unraid licence key) are in the repos and tarballs **in clear, by choice** (files are mode 600); never put them in git.
+Offsite: built, not enabled yet (section 12.9). **Decision (2026-10-17): the NAS data itself (media, photos, anything on Unraid shares) not being backed up is accepted for now.** Parity only; the plan is to add a cloud backup eventually. Do not treat it as an oversight or nag about it, but keep it in mind when sizing new NAS-resident data (e.g. a photo library). **Not backed up:** the PBS VM itself (its OS disk, users, tokens; the runbook explains the rebuild), the Unraid OS images and `/boot/syslinux` (plugin packages are re-downloaded from the `.plg` files), media and other NAS data. `/mnt/user/appdata` on Unraid is empty today; if you add containers with data, an appdata backup has to be added. Secrets (`/etc/pve/priv`, SSH keys, duckdns token, Unraid licence key) are in the repos and tarballs **in clear, by choice** (files are mode 600); never put them in git.
 
 ### 12.5 The laptop
 Per the owner: `~/bin/restic/restic_backup.sh` backs the laptop up to the NAS (`Backup/Framework`) and also pulls from the NAS share `Backup/{unraid_appdata,unraid_config,proxmox_config}`. The restic repos keep every retained snapshot (7 daily / 4 weekly / 6 monthly), so a pull of a repo folder brings the history too.
@@ -636,10 +662,45 @@ Per the owner: `~/bin/restic/restic_backup.sh` backs the laptop up to the NAS (`
 - No PBS datastore or restic repo on `/mnt/user` paths over NFS (shfs stale handles, section 7.6); the PBS vdisk points straight at `/mnt/disk3/...`.
 - Disks are created with `discard = "on"` and `ssd = true` in Terraform (2026-10-15). Without discard the thin pool never frees deleted blocks and PBS backs up the stale ones (347 GiB allocated vs about 165 GiB really used; 186 GiB after `fstrim`). **`terraform.tfvars` must mirror the live sizes and RAM**: change a disk or memory in Proxmox and update it in the same step, or the next `plan` wants to shrink it back. Compute (208, GPU) must keep `cpu_type = "host"`.
 
+- **CPU types** (`cpu_type` in `terraform.tfvars`): compute is `host` (GPU passthrough); db, webapps and media are `x86-64-v3` (AVX2: required by Immich's pgvecto.rs/VectorChord on db, faster thumbnails/ffmpeg on webapps and media; portable across modern CPUs). The rest stay at the template default `qemu64`, which hides AVX/AVX2 from the guest. A CPU type change takes effect after a full restart (`qm reboot <id>`).
+
 ### 12.8 Known gaps
 - **PBS itself is not backed up** (OS disk `/mnt/user/domains/...`, users, tokens). Rebuild steps are in the runbook (`--reuse-datastore`).
-- **One copy of VM disks, on one array disk.** Parity protects against a disk dying, not against deletion or corruption. No offsite copy yet; a PBS sync job to a second target is the easy next step.
+- **One copy of VM disks, on one array disk.** Parity protects against a disk dying, not against deletion or corruption. The offsite copy (Backblaze B2, section 12.9) is built but not enabled yet.
 - **The `Backup` NFS export is LAN-wide and the repos in it hold secrets in clear.** Restrict it to butlah and the laptop.
 - The PBS prune job (7/4/6) is set by the owner on the PBS VM and has not been checked from butlah; `backup-check.sh` alerts if a guest piles up over 30 snapshots.
 
 Restore procedures (one VM, one file, a database dump, rebuilding butlah, Unraid or both): **`/root/backup/RESTORE-RUNBOOK.md`**.
+
+### 12.9 Offsite backup to Backblaze B2 (built 2026-10-19, **not enabled yet**)
+One declarative file, one runner, one timer per repo, all on butlah and all outside git like the rest of `/root/backup`:
+
+| What | Where |
+|---|---|
+| Declaration (bucket, NFS mounts, repos, whitelists/blacklists, schedules, retention, prune/check cadence, stale limits, `not_backed_up` list) | `/root/backup/cloud-backup.json` |
+| Runner | `/root/backup/cloud-backup.py` (`--list`, `--check-config`, `--plan`, `--estimate --mbps N`, `run REPO`, `--verify REPO`, `--install-units`, `--stale`, `--gen-password`, `--show-password`) |
+| Timers | generated by `--install-units`: `cloud-backup-<repo>.service/.timer` (a failed run is retried hourly, 4 times per 12 h) |
+| Secrets (mode 600, **excluded from the host-config backup** and from git) | `/root/backup/secrets/b2.env` (`B2_ACCOUNT_ID`, `B2_ACCOUNT_KEY`) and `secrets/<repo>.pass` |
+| State | `/var/lib/cloud-backup/<repo>/` (last success, prune, check, failure) |
+| Alerts | failure -> `CloudBackupFailed`, damaged repo -> `CloudBackupCheckFailed` (runner); no success within `stale_after_hours` -> `CloudBackupStale` (`backup-check.sh`, hourly) |
+
+- **One restic repo per kind of data** (own password, schedule, retention): `photos` (Immich library, nightly), `proxmox-config`, `unraid-config`, `laptop` (weekly `restic copy` of the existing local repos, which re-encrypts them with a strong cloud password and keeps their snapshot history), `webapps-cache` (about 174 GB, weekly), `webapps-array` (about 44 GB, weekly), `public` (weekly; `/Takeout` excluded, it is the temporary Google download), `pbs` (the PBS datastore vdisk, monthly). Owner decisions of 2026-10-19: all of these are backed up. Repos with an empty password are never copied raw to the cloud: the runner refuses missing, short (<16) or non-600 password files.
+- **Sources** are NFS exports mounted read-only for the run (shared between overlapping runs, unmounted by the last one out) or local paths. `paths` is a whitelist relative to the source root, `exclude` a blacklist (leading `/` = anchored at the source root, otherwise any depth), and a folder with a `.nobackup` file is skipped. Immich's `thumbs/` and `encoded-video/` are excluded (regenerable by Immich jobs).
+- **Retention and pruning:** `forget` after every run; `prune` (`--max-unused 10%`) and a `restic check --read-data-subset 1%` every 30 days. Photos rarely change, so pruning them is nearly free; B2 keeps deleted file versions until a lifecycle rule purges them, so set the bucket lifecycle to "keep only the last version".
+- **PBS monthly:** `Backup/Butlah/pbs-vdisk/vdisk2.img` is a 1 TiB sparse file (about 120 GB used) that PBS keeps writing to, so a copy that takes hours could be inconsistent. The repo declares it under `stable_files`: size and mtime are compared before and after the copy; if PBS wrote meanwhile the snapshot is tagged `dirty`, the run fails and the unit retries hourly until a quiet window produces a clean copy (the next clean run deletes the dirty snapshot). It runs on the 2nd at 10:00, away from the 02:00 VM job; keep PBS GC/prune jobs out of that window. Reading 1 TiB over NFS takes about 3 hours; only the ~120 GB of real data is uploaded. Restoring it gives back the datastore image to re-attach (runbook section B step 4).
+- **Not in the cloud on purpose** (also in `not_backed_up`): `Server_Media` (Jellyfin media; the Jellyfin database with every title and path is in the nightly dump inside the media VM's backups, so a list of lost movies and shows can be regenerated: 1173 movies, 98 series, 9413 episodes at the last check).
+- **Cost/time:** about $6 per TB per month (check Backblaze's page). The first upload is limited by the home uplink: 600 GB takes about 3 days at 20 Mbit/s, 2.5 TB about 12 days. `cloud-backup.py --estimate REPO --mbps N` gives the size and time for a repo from its real sources before anything is uploaded.
+- **Restore:** `RESTORE-RUNBOOK.md` section D. The repo passwords and the B2 key are in the owner's password manager and on paper, deliberately not in any other backup.
+
+**To switch it on** (owner steps in this order):
+1. Backblaze: create a private bucket (lifecycle: keep only the last version) and an application key limited to it. Put the bucket name in `backend.bucket`, and the key in `secrets/b2.env`.
+2. Unraid: butlah (`192.168.1.200`) must be allowed to read the NFS exports of every share a repo uses (checked 2026-10-19: Server_WebappsCache, Server_WebappsArray, Public, Immich and Backup all mount read-only from butlah).
+3. `cloud-backup.py --gen-password photos` (and for each repo), then `--show-password REPO`: store every password in the password manager and on paper. For `laptop`, put the laptop repo's own password in `secrets/laptop-source.pass`.
+4. Set `"enabled": true` for the repos wanted, `--check-config`, `--plan REPO`, `--estimate REPO --mbps <your uplink>`, then `--install-units`. The first `photos` run seeds for days; watch it with `journalctl -fu cloud-backup-photos`.
+5. After the first run: `cloud-backup.py --verify photos`, and try one real restore on another machine.
+
+**Open decisions:**
+- **Immich database offsite.** The `photos` repo holds the files, but albums, faces, tags and users are in `pg-immich`, whose nightly dump is only inside the db VM's disk (which is in PBS, not offsite). Options: (a) switch Immich's own scheduled database dump back on (`backup.database.enabled` in the Immich config template; it writes into `backups/` of the library, so the `photos` repo carries it), the simplest; (b) pull the dump from the VM. Decide before the first `photos` run.
+- **Other databases offsite** (Pocket-ID, Grafana, Open WebUI, the journal, speedtest): their dumps also only live in the VM disks and PBS. A small `db-dumps` repo needs a way to get the dumps off the VMs (not built).
+- **Where VM dumps go so that they are backed up** (under discussion; owner decision pending). Candidate: butlah pulls `/var/backups/vm-dumps` from each VM with rsync over a restricted SSH key (Ansible-provisioned, same pattern as the Unraid read-only gate) into `/srv/backup/vm-dumps/<vm>/`, and a `vm-dumps` cloud repo backs that up daily.
+
